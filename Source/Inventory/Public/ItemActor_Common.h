@@ -1,0 +1,29 @@
+﻿// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "ItemActor_Base.h"
+#include "ItemActor_Common.generated.h"
+
+UCLASS()
+class INVENTORY_API AItemActor_Common : public AItemActor_Base
+{
+	GENERATED_BODY()
+
+public:
+	// Sets default values for this actor's properties
+	AItemActor_Common(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UStaticMeshComponent* StaticMeshComp;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	USkeletalMeshComponent* SkeletalMeshComp;
+
+	UFUNCTION(BlueprintCallable)
+	void SetUp(const FTransform& Transform);
+	
+protected:
+	virtual void OnConstruction(const FTransform& Transform) override;
+};
