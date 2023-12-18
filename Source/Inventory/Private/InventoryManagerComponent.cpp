@@ -4,6 +4,8 @@
 #include "InventoryManagerComponent.h"
 
 #include "InventoryFragment_Equipment.h"
+#include "InventoryFragment_SkeletalMesh.h"
+#include "InventoryFragment_StaticMesh.h"
 #include "InventoryFragment_Stats.h"
 #include "InventoryItemDefinition.h"
 #include "InventoryItemInstance_Equipment.h"
@@ -109,22 +111,25 @@ int FInventoryList::AddItem(TSubclassOf<UInventoryItemDefinition> ItemDef, int C
 		FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
 
 		// Loop find stack.
-		while (FindStackIndex >= 0 && Count > 0)
+		if (SlotIndex < 0)
 		{
-			FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
-			if (FindStackRemainAmount >= Count)
+			while (FindStackIndex >= 0 && Count > 0)
 			{
-				Slots[FindStackIndex].StackCount += Count;
-				MarkItemDirty(Slots[FindStackIndex]);
-				Count = 0;
-			}
-			else if (FindStackIndex >= 0)
-			{
-				Slots[FindStackIndex].StackCount += FindStackRemainAmount;
-				MarkItemDirty(Slots[FindStackIndex]);
-				Count -= FindStackRemainAmount;
-			}
-		};
+				FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
+				if (FindStackRemainAmount >= Count)
+				{
+					Slots[FindStackIndex].StackCount += Count;
+					MarkItemDirty(Slots[FindStackIndex]);
+					Count = 0;
+				}
+				else if (FindStackIndex >= 0)
+				{
+					Slots[FindStackIndex].StackCount += FindStackRemainAmount;
+					MarkItemDirty(Slots[FindStackIndex]);
+					Count -= FindStackRemainAmount;
+				}
+			};
+		}
 		// Finish find stack.
 		if (Count <= 0)
 		{
@@ -143,7 +148,7 @@ int FInventoryList::AddItem(TSubclassOf<UInventoryItemDefinition> ItemDef, int C
 			{
 				FInventorySlot Slot = AddNewInstance(ItemDef, (Count >= maxStack) ? maxStack : Count);
 
-				Slots[(SlotIndex >= 0) ? SlotIndex : FindEmptyIndex] = Slot;
+				Slots[SlotIndex >= 0 ? SlotIndex : FindEmptyIndex] = Slot;
 				MarkItemDirty(Slot);
 				Count -= (Count >= maxStack) ? maxStack : Count;
 
@@ -205,7 +210,8 @@ void FInventoryList::RemoveItem(const int index, const int amount)
 {
 	if (Slots.Num() > index)
 	{
-		if (const int count = FMath::Max(Slots[index].StackCount - amount, 0) > 0)
+		const int count = FMath::Max(Slots[index].StackCount - amount, 0);
+		if (count > 0)
 		{
 			Slots[index].StackCount = count;
 		}
@@ -216,11 +222,102 @@ void FInventoryList::RemoveItem(const int index, const int amount)
 			{
 				IMC->UnequipInstance();
 			}
+			Slots[index].Instance->ConditionalBeginDestroy();
 			const FInventorySlot EmptySlot;
 			Slots[index] = EmptySlot;
 			MarkItemDirty(Slots[index]);
 		}
 	}
+}
+
+bool FInventoryList::ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount)
+{
+	if (ItemDef != nullptr && Amount > 0 && GetTotalItemAmount(ItemDef) > Amount)
+	{
+		int id = 0;
+		for (const auto slot : Slots)
+		{
+			if (slot.Instance)
+			{
+				if (slot.Instance->GetItemDef() == ItemDef && Amount != 0)
+				{
+					if (Amount > slot.StackCount)
+					{
+						RemoveItem(id, slot.StackCount);
+						Amount -= slot.StackCount;
+					}
+					else
+					{
+						RemoveItem(id,Amount);
+						return true;
+					}
+				}
+				id++;
+			}
+		}
+	}
+	return false;
+}
+
+void FInventoryList::DragDropItem(int DragIndex, int DropIndex)
+{
+	//check valid ptr
+	check(Slots.IsValidIndex(DragIndex) && Slots.IsValidIndex(DropIndex))
+	check(Slots[DragIndex].Instance != nullptr && Slots[DropIndex].Instance != nullptr)
+	
+	if (Slots[DragIndex].Instance->GetItemDef() == Slots[DropIndex].Instance->GetItemDef())
+	{
+		//Stack
+		const int maxStackAmount = Slots[DragIndex].Instance->GetItemDef().GetDefaultObject()->MaxStackAmount;
+		const int finalAmount = Slots[DropIndex].StackCount + Slots[DragIndex].StackCount;
+		const int calculateAmount = finalAmount - maxStackAmount;
+		if (Slots[DropIndex].StackCount != maxStackAmount)
+		{
+			if (calculateAmount > 0)
+			{
+				Slots[DropIndex].StackCount = maxStackAmount;
+				Slots[DragIndex].StackCount = calculateAmount;
+			}
+			else
+			{
+				Slots[DropIndex].StackCount = finalAmount;
+				RemoveItem(DragIndex, Slots[DragIndex].StackCount);
+			}
+			//Rep net
+			MarkItemDirty(Slots[DropIndex]);
+			MarkItemDirty(Slots[DragIndex]);
+			return;
+		}
+	}
+	
+	//Switch
+	const FInventorySlot Slot = Slots[DropIndex];
+	Slots[DropIndex] = Slots[DragIndex];
+	Slots[DragIndex] = Slot;
+	
+	//Rep net
+	MarkItemDirty(Slots[DropIndex]);
+	MarkItemDirty(Slots[DragIndex]);
+}
+
+int FInventoryList::GetTotalItemAmount(TSubclassOf<UInventoryItemDefinition> ItemDef)
+{
+	if (ItemDef != nullptr)
+	{
+		int LocalTotalAmount = 0;
+		for (FInventorySlot Slot : Slots)
+		{
+			if (Slot.Instance != nullptr)
+			{
+				if (ItemDef == Slot.Instance->GetItemDef())
+				{
+					LocalTotalAmount += Slot.StackCount;
+				}
+			}
+		}
+		return LocalTotalAmount;
+	}
+	else return -1;
 }
 
 // Sets default values for this component's properties
@@ -287,10 +384,54 @@ int UInventoryManagerComponent::AddItem(TArray<FGameplayTagStack> TagStackOverri
 	return -1;
 }
 
-bool UInventoryManagerComponent::DropItemCheck(FVector& DropLocation) const
+bool UInventoryManagerComponent::ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount)
 {
+	return InventoryList.ItemDefUsed(ItemDef, Amount);
+}
+
+int UInventoryManagerComponent::ItemTotalAmount(TSubclassOf<UInventoryItemDefinition> ItemDef)
+{
+	return InventoryList.GetTotalItemAmount(ItemDef);
+}
+
+int UInventoryManagerComponent::FindEmpty()
+{
+	return InventoryList.FindEmpty();
+}
+
+void UInventoryManagerComponent::SplitItem_Implementation(int index, int amount)
+{
+	check(InventoryList.Slots.IsValidIndex(index))
+
+	const int emptyIndex = InventoryList.FindEmpty();
+	if (emptyIndex >= 0)
+	{
+		TArray<FGameplayTagStack> stackTags;
+		if (Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[index].Instance))
+		{
+			stackTags = Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[index].Instance)->GetStatTags();
+		}
+		InventoryList.AddItem(InventoryList.Slots[index].Instance->GetItemDef(), amount, stackTags, emptyIndex);
+		InventoryList.RemoveItem(index, amount);
+	}
+}
+
+bool UInventoryManagerComponent::DropItemCheck(const TObjectPtr<UInventoryItemInstance> instancePtr, FVector& DropLocation) const
+{
+	check(instancePtr)
+	float checkLength = 50;
+	if (const auto ptr1 = instancePtr->FindFragmentByClass<UInventoryFragment_StaticMesh>())
+	{
+		checkLength = ptr1->PickupStaticMesh->GetBounds().SphereRadius * 2;
+	}
+	else if (const auto ptr2 = instancePtr->FindFragmentByClass<UInventoryFragment_SkeletalMesh>())
+	{
+		checkLength = ptr2->PickupSkeletalMesh->GetBounds().SphereRadius * 2;
+	}
+	
 	const FVector ActorLocation = GetOwner()->GetActorLocation();
-	DropLocation = GetOwner()->GetActorLocation() + GetOwner()->GetActorForwardVector() * 50;
+	DropLocation = GetOwner()->GetActorLocation() + GetOwner()->GetActorForwardVector() * checkLength;
+	DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation(), DropLocation, FColor::Red, false, 3);
 	FHitResult HitResult;
 	GetWorld()->LineTraceSingleByChannel(HitResult, ActorLocation, DropLocation, ECC_Visibility);
 	return !HitResult.IsValidBlockingHit();
@@ -298,17 +439,24 @@ bool UInventoryManagerComponent::DropItemCheck(FVector& DropLocation) const
 
 void UInventoryManagerComponent::DropItem_Implementation(int index, int amount)
 {
-	FVector DropLocation;
-	if (DropItemCheck(DropLocation))
+	if (InventoryList.Slots.IsValidIndex(index))
 	{
-		const auto instance = InventoryList.Slots[index].Instance;
-		FGameplayTagStackContainer tagContainer;
-		if (const auto statTagsInstance = Cast<UInventoryItemInstance_StatTags>(instance))
+		FVector DropLocation;
+		if (DropItemCheck(InventoryList.Slots[index].Instance,DropLocation))
 		{
-			tagContainer = statTagsInstance->GetStatTagsContainer();
+			const auto instance = InventoryList.Slots[index].Instance;
+			FGameplayTagStackContainer tagContainer;
+			if (const auto statTagsInstance = Cast<UInventoryItemInstance_StatTags>(instance))
+			{
+				tagContainer = statTagsInstance->GetStatTagsContainer();
+			}
+			CreateItemActorInFront(instance->GetItemDef(), amount, tagContainer, DropLocation);
+			RemoveItem(index, amount);
 		}
-		CreateItemActorInFront(instance->GetItemDef(), amount, tagContainer, DropLocation);
-		RemoveItem(index, amount);
+		else
+		{
+			K2_UnableToDropItem();
+		}
 	}
 }
 
@@ -339,12 +487,13 @@ void UInventoryManagerComponent::CreateItemActorInFront_Implementation(TSubclass
 {
 	FActorSpawnParameters spawnInfo;
 	spawnInfo.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	if (const auto actor = GetWorld()->SpawnActorDeferred<AItemActor_Common>(AItemActor_Common::StaticClass(), FTransform(DropLocation)))
+	const FTransform actorTransform = FTransform(GetOwner()->GetActorForwardVector().ToOrientationRotator(), DropLocation);
+	if (const auto actor = GetWorld()->SpawnActorDeferred<AItemActor_Common>(AItemActor_Common::StaticClass(), actorTransform))
 	{
 		actor->ItemID = ItemDef;
 		actor->Amount = count;
 		actor->OverrideTagStack = TagStackContainer.GetTagStacks();
-		actor->FinishSpawning(FTransform(DropLocation));
+		actor->FinishSpawning(actorTransform);
 	}
 }
 
@@ -362,11 +511,7 @@ void UInventoryManagerComponent::PickupSelectedIdChange(bool bUpOrDown)
 
 void UInventoryManagerComponent::DragDropItem_Implementation(int DragIndex, int DropIndex)
 {
-	const FInventorySlot Slot = InventoryList.Slots[DropIndex];
-	InventoryList.Slots[DropIndex] = InventoryList.Slots[DragIndex];
-	InventoryList.Slots[DragIndex] = Slot;
-	InventoryList.MarkItemDirty(InventoryList.Slots[DropIndex]);
-	InventoryList.MarkItemDirty(InventoryList.Slots[DragIndex]);
+	InventoryList.DragDropItem(DragIndex, DropIndex);
 
 	OnRep_List();
 }

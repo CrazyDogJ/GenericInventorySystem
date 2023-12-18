@@ -20,10 +20,16 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	USkeletalMeshComponent* SkeletalMeshComp;
+	
+	virtual void OnRep_ItemID() override;
 
+	void SetPawnCollisionChannel(bool bOverlaped) const;
+	
 	UFUNCTION(BlueprintCallable)
 	void SetUp(const FTransform& Transform);
 	
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
+
+	virtual void BeginPlay() override;
 };

@@ -13,8 +13,19 @@ AItemActor_Common::AItemActor_Common(const FObjectInitializer& ObjectInitializer
 	PrimaryActorTick.bCanEverTick = false;
 	SkeletalMeshComp = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalMesh"));
 	StaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StaticMesh"));
-	SkeletalMeshComp->SetIsReplicated(true);
-	StaticMeshComp->SetIsReplicated(true);
+	//SkeletalMeshComp->SetIsReplicated(true);
+	//StaticMeshComp->SetIsReplicated(true);
+	SetRootComponent(StaticMeshComp);
+}
+
+void AItemActor_Common::OnRep_ItemID()
+{
+	SetUp(GetTransform());
+}
+
+void AItemActor_Common::SetPawnCollisionChannel(bool bOverlaped) const
+{
+	Cast<UPrimitiveComponent>(GetRootComponent())->SetCollisionResponseToChannel(ECC_Pawn, bOverlaped ? ECR_Overlap : ECR_Block);
 }
 
 void AItemActor_Common::SetUp(const FTransform& Transform)
@@ -25,37 +36,27 @@ void AItemActor_Common::SetUp(const FTransform& Transform)
 		{
 			if (const UInventoryFragment_StaticMesh* StaticMeshFragment = Cast<UInventoryFragment_StaticMesh>(UInventoryFunctionLibrary::FindItemDefinitionFragment(ItemID, UInventoryFragment_StaticMesh::StaticClass())))
 			{
+				StaticMeshComp->SetVisibility(true);
 				StaticMeshComp->SetStaticMesh(StaticMeshFragment->PickupStaticMesh);
+				SetPawnCollisionChannel(!StaticMeshFragment->bEnableCollisionWithPlayer);
 				StaticMeshComp->SetSimulatePhysics(StaticMeshFragment->bEnablePhysics);
-				if (StaticMeshFragment->bEnableCollisionWithPlayer)
-				{
-					StaticMeshComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
-				}
-				else
-				{
-					StaticMeshComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-				}
 				SkeletalMeshComp->SetSkeletalMesh(nullptr);
+				SkeletalMeshComp->SetVisibility(false);
 				SetRootComponent(StaticMeshComp);
 				SkeletalMeshComp->SetWorldTransform(StaticMeshComp->GetComponentTransform());
 				SetActorTransform(Transform);
 			}
 			if (const UInventoryFragment_SkeletalMesh* SkeletalMeshFragment = Cast<UInventoryFragment_SkeletalMesh>(UInventoryFunctionLibrary::FindItemDefinitionFragment(ItemID, UInventoryFragment_SkeletalMesh::StaticClass())))
 			{
+				SkeletalMeshComp->SetVisibility(true);
 				SkeletalMeshComp->SetSkeletalMesh(SkeletalMeshFragment->PickupSkeletalMesh);
+				SetPawnCollisionChannel(!SkeletalMeshFragment->bEnableCollisionWithPlayer);
 				if (SkeletalMeshComp->GetPhysicsAsset() != nullptr)
 				{
 					SkeletalMeshComp->SetSimulatePhysics(SkeletalMeshFragment->bEnablePhysics);
 				}
-				if (SkeletalMeshFragment->bEnableCollisionWithPlayer)
-				{
-					SkeletalMeshComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
-				}
-				else
-				{
-					SkeletalMeshComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-				}
 				StaticMeshComp->SetStaticMesh(nullptr);
+				StaticMeshComp->SetVisibility(false);
 				SetRootComponent(SkeletalMeshComp);
 				StaticMeshComp->SetWorldTransform(SkeletalMeshComp->GetComponentTransform());
 				SetActorTransform(Transform,false,nullptr,ETeleportType::TeleportPhysics);
@@ -66,6 +67,15 @@ void AItemActor_Common::SetUp(const FTransform& Transform)
 
 void AItemActor_Common::OnConstruction(const FTransform& Transform)
 {
-	Super::OnConstruction(Transform);
 	SetUp(Transform);
+	Super::OnConstruction(Transform);
+}
+
+void AItemActor_Common::BeginPlay()
+{
+	Super::BeginPlay();
+	if (HasAuthority())
+	{
+		SetUp(GetTransform());
+	}
 }

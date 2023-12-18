@@ -8,7 +8,7 @@
 AItemActor_Base::AItemActor_Base(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	SetReplicates(true);
+	bReplicates = true;
 	SetReplicatingMovement(true);
 }
 

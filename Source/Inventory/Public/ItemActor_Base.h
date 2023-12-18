@@ -16,7 +16,7 @@ public:
 	// Sets default values for this actor's properties
 	AItemActor_Base(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Inventory", SaveGame)
+	UPROPERTY(ReplicatedUsing = OnRep_ItemID, EditAnywhere, BlueprintReadWrite, Category = "Inventory", SaveGame)
 	TSubclassOf<UInventoryItemDefinition> ItemID;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Inventory", meta = (ClampMin = "1"), SaveGame)
@@ -24,5 +24,7 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, SaveGame)
 	TArray<FGameplayTagStack> OverrideTagStack;
-	
+
+	UFUNCTION()
+	virtual void OnRep_ItemID() {};
 };

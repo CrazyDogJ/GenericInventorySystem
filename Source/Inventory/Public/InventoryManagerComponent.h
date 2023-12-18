@@ -97,6 +97,12 @@ public:
 	FInventorySlot AddNewInstance(TSubclassOf<UInventoryItemDefinition> ItemDef, int StackAmount = 1) const;
 	
 	void RemoveItem(const int index, const int amount);
+
+	bool ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount = 1); 
+
+	void DragDropItem(int DragIndex, int DropIndex);
+	
+	int GetTotalItemAmount(TSubclassOf<UInventoryItemDefinition> ItemDef);
 	
 #pragma endregion CalculationFunction
 	
@@ -157,13 +163,25 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	int AddItem(TArray<FGameplayTagStack> TagStackOverride, TSubclassOf<UInventoryItemDefinition> ItemDef, int Count = 1, int SlotIndex = -1);
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
+	bool ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount = 1);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Pickup)
 	void PickUpItem(AItemActor_Base* ItemActor);
 
+	UFUNCTION(BlueprintCallable, Category = Inventory)
+	int ItemTotalAmount(TSubclassOf<UInventoryItemDefinition> ItemDef);
+	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
 	void DropItem(int index, int amount);
+
+	UFUNCTION(BlueprintCallable, Category = Inventory)
+	int FindEmpty();
+
+	UFUNCTION(BlueprintCallable, Server, Reliable, Category=Inventory)
+	void SplitItem(int index, int amount);
 	
-	bool DropItemCheck(FVector& DropLocation) const;
+	bool DropItemCheck(const TObjectPtr<UInventoryItemInstance> instancePtr, FVector& DropLocation) const;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
 	void RemoveItem(int index, int amount);
@@ -179,6 +197,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
 	void ChangeQuickBarIndex_Server(int index);
+
+	UFUNCTION(BlueprintImplementableEvent, DisplayName = "On Unable To Drop Item")
+	void K2_UnableToDropItem();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	USphereComponent* SphereComp;
