@@ -12,6 +12,14 @@ FQualitySetting::FQualitySetting(const FGameplayTag Tag, const FLinearColor Colo
 	QualityName = Name;
 }
 
+FInventoryGameplayTagSetting::FInventoryGameplayTagSetting(const FGameplayTag Tag, const FText LocName,
+	const FText LocDesc)
+{
+	OtherGameplayTag = Tag;
+	OtherGameplayTagLocName = LocName;
+	OtherGameplayTagLocDesc = LocDesc;
+}
+
 #define LOCTEXT_NAMESPACE "UInventorySettings"
 
 UInventorySettings::UInventorySettings(const FObjectInitializer& obj)
@@ -21,6 +29,7 @@ UInventorySettings::UInventorySettings(const FObjectInitializer& obj)
 	const FGameplayTag commonTag = FGameplayTag::RequestGameplayTag(TEXT("InventoryQuality.Common"));
 	const FQualitySetting Common = FQualitySetting(commonTag, FLinearColor::Gray, LOCTEXT("InventoryQualitySettingCommon", "Common"));
 	QualitySettings = TArray<FQualitySetting>{Common};
+	CustomDepthStencil = 6;
 }
 
 #undef LOCTEXT_NAMESPACE

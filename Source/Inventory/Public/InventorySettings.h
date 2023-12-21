@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "InventoryBuffInfoBase.h"
 #include "UObject/Object.h"
 #include "InventorySettings.generated.h"
 
@@ -32,6 +33,30 @@ public:
 	FText QualityName;
 };
 
+USTRUCT(BlueprintType)
+struct FInventoryGameplayTagSetting
+{
+	GENERATED_BODY()
+
+	FInventoryGameplayTagSetting()
+	{
+		OtherGameplayTag = FGameplayTag::EmptyTag;
+		OtherGameplayTagLocName = FText();
+		OtherGameplayTagLocDesc = FText();
+	};
+	
+	FInventoryGameplayTagSetting(const FGameplayTag Tag, const FText LocName, const FText LocDesc);
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	FGameplayTag OtherGameplayTag;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	FText OtherGameplayTagLocName;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	FText OtherGameplayTagLocDesc;
+};
+
 /**
  * 
  */
@@ -45,4 +70,10 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TArray<FQualitySetting> QualitySettings;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory", meta=(UIMin = 0, UIMax = 255, ClampMin = 0, ClampMax = 255))
+	int32 CustomDepthStencil;
+	
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	TMap<FGameplayTag, TSoftClassPtr<UInventoryBuffInfoBase>> BuffInfos;
 };

@@ -5,6 +5,7 @@
 
 #include "InventoryFragment_Stats.h"
 #include "InventoryItemDefinition.h"
+#include "InventorySettings.h"
 #include "Net/UnrealNetwork.h"
 
 UInventoryItemInstance_StatTags::UInventoryItemInstance_StatTags(const FObjectInitializer& ObjectInitializer)

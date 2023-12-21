@@ -24,4 +24,5 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = Equipment)
 	TSubclassOf<UInventoryItemDefinition> AmmoItemUsage;
+	
 };

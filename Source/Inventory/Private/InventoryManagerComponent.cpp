@@ -263,9 +263,8 @@ void FInventoryList::DragDropItem(int DragIndex, int DropIndex)
 {
 	//check valid ptr
 	check(Slots.IsValidIndex(DragIndex) && Slots.IsValidIndex(DropIndex))
-	check(Slots[DragIndex].Instance != nullptr && Slots[DropIndex].Instance != nullptr)
 	
-	if (Slots[DragIndex].Instance->GetItemDef() == Slots[DropIndex].Instance->GetItemDef())
+	if (Slots[DragIndex].Instance != nullptr && Slots[DropIndex].Instance != nullptr)
 	{
 		//Stack
 		const int maxStackAmount = Slots[DragIndex].Instance->GetItemDef().GetDefaultObject()->MaxStackAmount;
