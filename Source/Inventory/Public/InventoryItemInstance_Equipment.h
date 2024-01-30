@@ -17,7 +17,7 @@ class INVENTORY_API UInventoryItemInstance_Equipment : public UInventoryItemInst
 public:
 	virtual void OnEquipped();
 	virtual void OnUnequipped();
-
+	
 protected:
 
 	UFUNCTION(BlueprintImplementableEvent, Category=Equipment, meta=(DisplayName="On Equipped"))

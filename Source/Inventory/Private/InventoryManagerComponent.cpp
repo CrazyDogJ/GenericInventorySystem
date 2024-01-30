@@ -217,22 +217,31 @@ void FInventoryList::RemoveItem(const int index, const int amount)
 		}
 		else
 		{
-			UInventoryManagerComponent* IMC = Cast<UInventoryManagerComponent>(OwnerComponent);
-			if (index == IMC->SelectedQuickBarIndex)
+			if (bIsACopyList == false)
 			{
-				IMC->UnequipInstance();
+				if (UInventoryManagerComponent* IMC = Cast<UInventoryManagerComponent>(OwnerComponent))
+				{
+					if (index == IMC->SelectedQuickBarIndex)
+					{
+						IMC->UnequipInstance();
+					}
+				}
+				if (Slots[index].Instance)
+				{
+					Slots[index].Instance->OnInstanceDestroyed();
+					Slots[index].Instance->ConditionalBeginDestroy();
+				}
 			}
-			Slots[index].Instance->ConditionalBeginDestroy();
 			const FInventorySlot EmptySlot;
 			Slots[index] = EmptySlot;
-			MarkItemDirty(Slots[index]);
 		}
+		MarkItemDirty(Slots[index]);
 	}
 }
 
 bool FInventoryList::ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount)
 {
-	if (ItemDef != nullptr && Amount > 0 && GetTotalItemAmount(ItemDef) > Amount)
+	if (ItemDef != nullptr && Amount > 0 && GetTotalItemAmount(ItemDef) >= Amount)
 	{
 		int id = 0;
 		for (const auto slot : Slots)
@@ -252,8 +261,8 @@ bool FInventoryList::ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, 
 						return true;
 					}
 				}
-				id++;
 			}
+			id++;
 		}
 	}
 	return false;
@@ -264,7 +273,9 @@ void FInventoryList::DragDropItem(int DragIndex, int DropIndex)
 	//check valid ptr
 	check(Slots.IsValidIndex(DragIndex) && Slots.IsValidIndex(DropIndex))
 	
-	if (Slots[DragIndex].Instance != nullptr && Slots[DropIndex].Instance != nullptr)
+	if (Slots[DragIndex].Instance != nullptr
+		&& Slots[DropIndex].Instance != nullptr
+		&& Slots[DragIndex].Instance->GetItemDef() == Slots[DropIndex].Instance->GetItemDef())
 	{
 		//Stack
 		const int maxStackAmount = Slots[DragIndex].Instance->GetItemDef().GetDefaultObject()->MaxStackAmount;
@@ -333,6 +344,7 @@ void UInventoryManagerComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProp
 
 	DOREPLIFETIME(ThisClass, InventoryList);
 	DOREPLIFETIME(ThisClass, SelectedQuickBarIndex);
+	DOREPLIFETIME(ThisClass, KnownRecipes);
 }
 
 void UInventoryManagerComponent::BeginPlay()
@@ -388,6 +400,43 @@ bool UInventoryManagerComponent::ItemDefUsed(TSubclassOf<UInventoryItemDefinitio
 	return InventoryList.ItemDefUsed(ItemDef, Amount);
 }
 
+bool UInventoryManagerComponent::CheckRecipeNeedItems(TSubclassOf<UInventoryItemRecipe> Recipe)
+{
+	if (IsValid(Recipe))
+	{
+		const auto needItems = Recipe.GetDefaultObject()->NeedItems;
+		for (const TPair<TSubclassOf<UInventoryItemDefinition>, int>& pair : needItems)
+		{
+			const bool bMoreThan = ItemTotalAmount(pair.Key) >= pair.Value;
+			if (!bMoreThan)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+void UInventoryManagerComponent::CraftItem_Implementation(TSubclassOf<UInventoryItemRecipe> Recipe)
+{
+	const TMap<TSubclassOf<UInventoryItemDefinition>, int> Need = Recipe.GetDefaultObject()->NeedItems;
+    const TMap<TSubclassOf<UInventoryItemDefinition>, int> Out = Recipe.GetDefaultObject()->OutItems;
+    if (CheckRecipeNeedItems(Recipe)
+    	&& CheckInventoryExchange(Need, Out))
+    {
+    	for (auto pair : Need.Array())
+    	{
+    		ItemDefUsed(pair.Key, pair.Value);
+    	}
+    	for (auto pair : Out.Array())
+    	{
+    		const TArray<FGameplayTagStack> TagStackOverride;
+    		InventoryList.AddItem(pair.Key, pair.Value, TagStackOverride);
+    	}
+    }
+}
+
 int UInventoryManagerComponent::ItemTotalAmount(TSubclassOf<UInventoryItemDefinition> ItemDef)
 {
 	return InventoryList.GetTotalItemAmount(ItemDef);
@@ -396,6 +445,32 @@ int UInventoryManagerComponent::ItemTotalAmount(TSubclassOf<UInventoryItemDefini
 int UInventoryManagerComponent::FindEmpty()
 {
 	return InventoryList.FindEmpty();
+}
+
+bool UInventoryManagerComponent::CheckInventoryExchange(TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems,
+	TMap<TSubclassOf<UInventoryItemDefinition>, int> InItems)
+{
+	FInventoryList List = InventoryList;
+	List.bIsACopyList = true;
+
+	for (const TPair<TSubclassOf<UInventoryItemDefinition>, int>& pair : OutItems)
+	{
+		if (!List.ItemDefUsed(pair.Key, pair.Value))
+		{
+			return false;
+		}
+	}
+
+	for (const TPair<TSubclassOf<UInventoryItemDefinition>, int>& pair : InItems)
+	{
+		const TArray<FGameplayTagStack> TagStackOverride;
+		if (List.AddItem(pair.Key, pair.Value, TagStackOverride) != 0)
+		{
+			return false;
+		}
+	}
+	
+	return true;
 }
 
 void UInventoryManagerComponent::SplitItem_Implementation(int index, int amount)

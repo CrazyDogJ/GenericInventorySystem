@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagStack.h"
 #include "InventoryItemInstance.h"
+#include "InventoryItemRecipe.h"
 #include "ItemActor_Base.h"
 #include "Components/ActorComponent.h"
 #include "Components/SphereComponent.h"
@@ -69,6 +70,8 @@ public:
 
 	void GiveEmptySlots(int EmptySlotsAmount);
 
+	bool bIsACopyList = false;
+	
 #pragma region CalculationFunction
 	
 	/**
@@ -153,9 +156,15 @@ public:
 	
 	UPROPERTY(BlueprintReadOnly)
 	UInventoryItemInstance* EquippedInstance;
+
+	UPROPERTY(ReplicatedUsing = OnRep_KnownRecipes, BlueprintReadWrite, EditAnywhere)
+	TArray<TSubclassOf<UInventoryItemRecipe>> KnownRecipes;
 	
 	UFUNCTION()
 	void OnRep_SelectedQuickBarIndex();
+
+	UFUNCTION(BlueprintImplementableEvent)
+	void OnRep_KnownRecipes();
 
 	UFUNCTION()
 	void OnRep_List();
@@ -169,6 +178,12 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Pickup)
 	void PickUpItem(AItemActor_Base* ItemActor);
 
+	UFUNCTION(BlueprintCallable, Category = Crafting)
+	bool CheckRecipeNeedItems(TSubclassOf<UInventoryItemRecipe> Recipe);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Crafting)
+	void CraftItem(TSubclassOf<UInventoryItemRecipe> Recipe);
+
 	UFUNCTION(BlueprintCallable, Category = Inventory)
 	int ItemTotalAmount(TSubclassOf<UInventoryItemDefinition> ItemDef);
 	
@@ -177,6 +192,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = Inventory)
 	int FindEmpty();
+
+	UFUNCTION(BlueprintCallable, Category = Inventory)
+	bool CheckInventoryExchange(TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems, TMap<TSubclassOf<UInventoryItemDefinition>, int> InItems);
 
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category=Inventory)
 	void SplitItem(int index, int amount);

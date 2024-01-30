@@ -37,10 +37,18 @@ public:
 		// Default as outer object.
 		SetInstigator(GetOuter());
 		K2_OnInstanceCreated();
-	};
+	}
+
+	virtual void OnInstanceDestroyed()
+	{
+		K2_OnInstanceDestroyed();
+	}
 	
 	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Instance Created")
 	void K2_OnInstanceCreated();
+
+	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Instance Created")
+	void K2_OnInstanceDestroyed();
 	
 	UFUNCTION(BlueprintPure)
 	TSubclassOf<UInventoryItemDefinition> GetItemDef() const
