@@ -7,3 +7,15 @@ UInventoryItemRecipe::UInventoryItemRecipe(const FObjectInitializer& ObjectIniti
 	: Super(ObjectInitializer)
 {
 }
+
+TArray<UInventoryItemRecipeCondition*> UCraftingFunctionLibrary::GetConditions(
+	TSubclassOf<UInventoryItemRecipe> Recipe)
+{
+	if (Recipe)
+	{
+		const auto result = Recipe.GetDefaultObject()->Conditions;
+		return result;
+	}
+	TArray<UInventoryItemRecipeCondition*> empty;
+	return empty;
+}

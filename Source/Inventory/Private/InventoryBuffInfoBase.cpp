@@ -9,3 +9,8 @@ FText UInventoryBuffInfoBase::DescriptionOverride_Implementation(const float Val
 {
 	return Description;
 }
+
+void UInventoryBuffInfoBase::CleanUp()
+{
+	MarkAsGarbage();
+}

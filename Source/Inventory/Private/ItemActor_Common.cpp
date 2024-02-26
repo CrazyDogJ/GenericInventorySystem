@@ -39,6 +39,7 @@ void AItemActor_Common::SetUp(const FTransform& Transform)
 				StaticMeshComp->SetVisibility(true);
 				StaticMeshComp->SetStaticMesh(StaticMeshFragment->PickupStaticMesh);
 				SetPawnCollisionChannel(!StaticMeshFragment->bEnableCollisionWithPlayer);
+				StaticMeshComp->SetCollisionObjectType(ECC_WorldDynamic);
 				StaticMeshComp->SetSimulatePhysics(StaticMeshFragment->bEnablePhysics);
 				SkeletalMeshComp->SetSkeletalMesh(nullptr);
 				SkeletalMeshComp->SetVisibility(false);
@@ -51,6 +52,7 @@ void AItemActor_Common::SetUp(const FTransform& Transform)
 				SkeletalMeshComp->SetVisibility(true);
 				SkeletalMeshComp->SetSkeletalMesh(SkeletalMeshFragment->PickupSkeletalMesh);
 				SetPawnCollisionChannel(!SkeletalMeshFragment->bEnableCollisionWithPlayer);
+				SkeletalMeshComp->SetCollisionObjectType(ECC_WorldDynamic);
 				if (SkeletalMeshComp->GetPhysicsAsset() != nullptr)
 				{
 					SkeletalMeshComp->SetSimulatePhysics(SkeletalMeshFragment->bEnablePhysics);

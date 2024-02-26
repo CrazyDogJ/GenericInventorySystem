@@ -361,6 +361,13 @@ void UInventoryManagerComponent::BeginPlay()
 	SphereComp = Cast<USphereComponent>(GetOwner()->AddComponentByClass(USphereComponent::StaticClass(), true, GetOwner()->GetTransform(), false));
 	SphereComp->AttachToComponent(GetOwner()->GetRootComponent(), FAttachmentTransformRules::SnapToTargetIncludingScale);
 	SphereComp->bHiddenInGame = !bDebugDraw;
+	SphereComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	SphereComp->SetCollisionObjectType(SphereCollisionObjectType);
+	SphereComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+	for (const auto response : SphereCollisionResponses)
+	{
+		SphereComp->SetCollisionResponseToChannel(response.Key, response.Value);
+	}
 	SphereComp->SetSphereRadius(CanPickUpItemRadius);
 	SphereComp->OnComponentBeginOverlap.AddDynamic(this, &UInventoryManagerComponent::OnOverlapBegin);
 	SphereComp->OnComponentEndOverlap.AddDynamic(this, &UInventoryManagerComponent::OnOverlapEnd);
@@ -400,6 +407,21 @@ bool UInventoryManagerComponent::ItemDefUsed(TSubclassOf<UInventoryItemDefinitio
 	return InventoryList.ItemDefUsed(ItemDef, Amount);
 }
 
+int UInventoryManagerComponent::RecipeCraftTimes(TSubclassOf<UInventoryItemRecipe> Recipe)
+{
+	if (Recipe)
+	{
+		int MinTime = INT_MAX;
+		const auto needItems = Recipe.GetDefaultObject()->NeedItems;
+		for (const TPair<TSubclassOf<UInventoryItemDefinition>, int>& pair : needItems)
+		{
+			MinTime = FMath::Min(ItemTotalAmount(pair.Key) / pair.Value, MinTime);
+		}
+		return MinTime;
+	}
+	return -1;
+}
+
 bool UInventoryManagerComponent::CheckRecipeNeedItems(TSubclassOf<UInventoryItemRecipe> Recipe)
 {
 	if (IsValid(Recipe))
@@ -418,21 +440,21 @@ bool UInventoryManagerComponent::CheckRecipeNeedItems(TSubclassOf<UInventoryItem
 	return false;
 }
 
-void UInventoryManagerComponent::CraftItem_Implementation(TSubclassOf<UInventoryItemRecipe> Recipe)
+void UInventoryManagerComponent::CraftItem_Implementation(TSubclassOf<UInventoryItemRecipe> Recipe, int Times)
 {
 	const TMap<TSubclassOf<UInventoryItemDefinition>, int> Need = Recipe.GetDefaultObject()->NeedItems;
     const TMap<TSubclassOf<UInventoryItemDefinition>, int> Out = Recipe.GetDefaultObject()->OutItems;
     if (CheckRecipeNeedItems(Recipe)
-    	&& CheckInventoryExchange(Need, Out))
+    	&& CheckInventoryExchange(Need, Out, Times, Times))
     {
     	for (auto pair : Need.Array())
     	{
-    		ItemDefUsed(pair.Key, pair.Value);
+    		ItemDefUsed(pair.Key, pair.Value * Times);
     	}
     	for (auto pair : Out.Array())
     	{
     		const TArray<FGameplayTagStack> TagStackOverride;
-    		InventoryList.AddItem(pair.Key, pair.Value, TagStackOverride);
+    		InventoryList.AddItem(pair.Key, pair.Value * Times, TagStackOverride);
     	}
     }
 }
@@ -448,14 +470,14 @@ int UInventoryManagerComponent::FindEmpty()
 }
 
 bool UInventoryManagerComponent::CheckInventoryExchange(TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems,
-	TMap<TSubclassOf<UInventoryItemDefinition>, int> InItems)
+	TMap<TSubclassOf<UInventoryItemDefinition>, int> InItems, int OutTimes, int InTimes)
 {
 	FInventoryList List = InventoryList;
 	List.bIsACopyList = true;
 
 	for (const TPair<TSubclassOf<UInventoryItemDefinition>, int>& pair : OutItems)
 	{
-		if (!List.ItemDefUsed(pair.Key, pair.Value))
+		if (!List.ItemDefUsed(pair.Key, pair.Value * OutTimes))
 		{
 			return false;
 		}
@@ -464,7 +486,7 @@ bool UInventoryManagerComponent::CheckInventoryExchange(TMap<TSubclassOf<UInvent
 	for (const TPair<TSubclassOf<UInventoryItemDefinition>, int>& pair : InItems)
 	{
 		const TArray<FGameplayTagStack> TagStackOverride;
-		if (List.AddItem(pair.Key, pair.Value, TagStackOverride) != 0)
+		if (List.AddItem(pair.Key, pair.Value * InTimes, TagStackOverride) != 0)
 		{
 			return false;
 		}
@@ -597,6 +619,62 @@ void UInventoryManagerComponent::ChangeQuickBarIndex_Server_Implementation(int i
 		SelectedQuickBarIndex = index;
 		OnRep_SelectedQuickBarIndex();
 	}
+}
+
+void UInventoryManagerComponent::ClearItems()
+{
+	for (int a = 0; a <= InventoryList.Slots.Num() - 1; a = a + 1)
+	{
+		InventoryList.RemoveItem(a, InventoryList.Slots[a].StackCount);
+	}
+}
+
+FInventorySaveData UInventoryManagerComponent::GetSaveData()
+{
+	FInventorySaveData InventorySaveData;
+	InventorySaveData.SlotsAmount = InventorySlotAmount;
+	int SlotIndex = 0;
+	for (FInventorySlot Slot : InventoryList.Slots)
+	{
+		if (Slot.Instance != nullptr)
+		{
+			InventorySaveData.ItemID.Add(Slot.Instance->GetItemDef());
+			InventorySaveData.StackCount.Add(Slot.StackCount);
+			FGameplayTagStackContainer TagContainer;
+			if (const auto statTagsInstance = Cast<UInventoryItemInstance_StatTags>(Slot.Instance))
+			{
+				TagContainer.SetStackTags(statTagsInstance->GetStatTags());
+			}
+			InventorySaveData.StackTags.Add(TagContainer);
+			InventorySaveData.SlotIndex.Add(SlotIndex);
+		}
+		SlotIndex++;
+	}
+	return InventorySaveData;
+}
+
+bool UInventoryManagerComponent::LoadSaveData(FInventorySaveData SaveData)
+{
+	ClearItems();
+	if (SaveData.IsValid())
+	{
+		//设置空slot数量
+		InventorySlotAmount = SaveData.SlotsAmount;
+		InventoryList.GiveEmptySlots(InventorySlotAmount);
+
+		int index = 0;
+		for (const auto slotIndex : SaveData.SlotIndex)
+		{
+			if (slotIndex >= 0)
+			{
+				const TArray<FGameplayTagStack> StackTags = SaveData.StackTags[index].GetTagStacks();
+				AddItem(StackTags, SaveData.ItemID[index], SaveData.StackCount[index], slotIndex);
+				index++;
+			}
+		}
+		return true;
+	}
+	return false;
 }
 
 void UInventoryManagerComponent::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

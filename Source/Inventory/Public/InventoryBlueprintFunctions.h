@@ -41,4 +41,7 @@ class INVENTORY_API UInventoryBlueprintFunctions : public UBlueprintFunctionLibr
 
 	UFUNCTION(BlueprintCallable, Category = Inventory)
 	static FText GetDescriptionFromBuffObject(FGameplayTagStack Tag);
+
+	UFUNCTION(BlueprintCallable, Category = Inventory)
+	static TArray<FGameplayTagStack> GetStatTags(FGameplayTagStackContainer InContainer) {return InContainer.GetTagStacks();};
 };

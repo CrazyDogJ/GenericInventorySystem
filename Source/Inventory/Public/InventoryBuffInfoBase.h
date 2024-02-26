@@ -31,4 +31,10 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category=Inventory)
 	void OnBuffEnd(const UInventoryItemInstance_StatTags* Instance, const float Value);
+
+	/**
+	 * Call when buff ended.
+	 */
+	UFUNCTION(BlueprintCallable, Category=Inventory)
+	void CleanUp();
 };

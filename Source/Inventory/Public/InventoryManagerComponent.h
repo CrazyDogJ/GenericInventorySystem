@@ -13,6 +13,29 @@
 #include "InventoryManagerComponent.generated.h"
 
 USTRUCT(BlueprintType)
+struct FInventorySaveData
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(SaveGame, BlueprintReadOnly)
+	int SlotsAmount;
+	UPROPERTY(SaveGame, BlueprintReadOnly)
+	TArray<TSubclassOf<UInventoryItemDefinition>> ItemID;
+	UPROPERTY(SaveGame, BlueprintReadOnly)
+	TArray<int> StackCount;
+	UPROPERTY(SaveGame, BlueprintReadOnly)
+	TArray<FGameplayTagStackContainer> StackTags;
+	UPROPERTY(SaveGame, BlueprintReadOnly)
+	TArray<int> SlotIndex;
+
+	bool IsValid() const
+	{
+		return SlotIndex.Num() > 0;
+	}
+};
+
+USTRUCT(BlueprintType)
 struct FInventorySlot : public FFastArraySerializerItem
 {
 	GENERATED_BODY()
@@ -136,28 +159,28 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Inventory)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Inventory)
 	int InventorySlotAmount = 10;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Inventory)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Inventory)
 	int QuickBarAmount = 3;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Pickup)
+	UPROPERTY(BlueprintReadOnly, Category = Inventory)
 	int PickupSelectedID = -1;
 
-	UPROPERTY(BlueprintReadOnly, Category = Pickup)
+	UPROPERTY(BlueprintReadOnly, Category = Inventory)
 	TArray<TObjectPtr<AItemActor_Base>> OverlapedActorsPtrs;
 	
-	UPROPERTY(ReplicatedUsing = OnRep_SelectedQuickBarIndex, BlueprintReadWrite, Category = Inventory)
+	UPROPERTY(ReplicatedUsing = OnRep_SelectedQuickBarIndex, BlueprintReadOnly, Category = Inventory)
 	int SelectedQuickBarIndex = 0;
 
 	UPROPERTY(EditAnywhere, Category = Inventory)
 	bool bDebugDraw = false;
 	
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(BlueprintReadOnly, Category = Inventory)
 	UInventoryItemInstance* EquippedInstance;
 
-	UPROPERTY(ReplicatedUsing = OnRep_KnownRecipes, BlueprintReadWrite, EditAnywhere)
+	UPROPERTY(ReplicatedUsing = OnRep_KnownRecipes, BlueprintReadWrite, EditAnywhere, Category = Crafting)
 	TArray<TSubclassOf<UInventoryItemRecipe>> KnownRecipes;
 	
 	UFUNCTION()
@@ -174,15 +197,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	bool ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount = 1);
+
+	UFUNCTION(BlueprintCallable, Category = Crafting)
+	int RecipeCraftTimes(TSubclassOf<UInventoryItemRecipe> Recipe);
 	
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Pickup)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
 	void PickUpItem(AItemActor_Base* ItemActor);
 
 	UFUNCTION(BlueprintCallable, Category = Crafting)
 	bool CheckRecipeNeedItems(TSubclassOf<UInventoryItemRecipe> Recipe);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Crafting)
-	void CraftItem(TSubclassOf<UInventoryItemRecipe> Recipe);
+	void CraftItem(TSubclassOf<UInventoryItemRecipe> Recipe, int Times = 1);
 
 	UFUNCTION(BlueprintCallable, Category = Inventory)
 	int ItemTotalAmount(TSubclassOf<UInventoryItemDefinition> ItemDef);
@@ -194,7 +220,8 @@ public:
 	int FindEmpty();
 
 	UFUNCTION(BlueprintCallable, Category = Inventory)
-	bool CheckInventoryExchange(TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems, TMap<TSubclassOf<UInventoryItemDefinition>, int> InItems);
+	bool CheckInventoryExchange(TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems, TMap<TSubclassOf<UInventoryItemDefinition>, int> InItems, int
+	                            OutTimes = 1, int InTimes = 1);
 
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category=Inventory)
 	void SplitItem(int index, int amount);
@@ -207,7 +234,7 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
 	void CreateItemActorInFront(TSubclassOf<UInventoryItemDefinition> ItemDef, int count, FGameplayTagStackContainer TagStackContainer, FVector DropLocation);
 	
-	UFUNCTION(BlueprintCallable, Category = Pickup)
+	UFUNCTION(BlueprintCallable, Category = Inventory)
 	void PickupSelectedIdChange(bool bUpOrDown);
 
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
@@ -218,11 +245,28 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, DisplayName = "On Unable To Drop Item")
 	void K2_UnableToDropItem();
+
+	UFUNCTION(BlueprintCallable,BlueprintAuthorityOnly)
+	void ClearItems();
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	//Translate to a object that save properties(used to save and load)
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
+	FInventorySaveData GetSaveData();
+
+	//Load save date(used to save and load)
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
+	bool LoadSaveData(FInventorySaveData SaveData);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sphere Collision")
 	USphereComponent* SphereComp;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditDefaultsOnly, Category = "Sphere Collision")
+	TEnumAsByte<ECollisionChannel> SphereCollisionObjectType = ECC_WorldDynamic;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Sphere Collision")
+	TMap<TEnumAsByte<ECollisionChannel>, TEnumAsByte<ECollisionResponse>> SphereCollisionResponses = {{ECollisionChannel::ECC_WorldDynamic, ECollisionResponse::ECR_Overlap}};
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Sphere Collision")
 	float CanPickUpItemRadius = 80;
 
 	// declare overlap begin function

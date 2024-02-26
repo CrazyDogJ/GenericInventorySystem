@@ -7,6 +7,8 @@
 #include "UObject/Object.h"
 #include "InventoryItemRecipe.generated.h"
 
+class UInventoryItemRecipeCondition;
+
 /**
  * 
  */
@@ -29,4 +31,17 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
 	TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category= "Inventory" , Instanced)
+	TArray<TObjectPtr<UInventoryItemRecipeCondition>> Conditions;
+};
+
+UCLASS()
+class UCraftingFunctionLibrary : public UBlueprintFunctionLibrary
+{
+	GENERATED_BODY()
+
+public:
+	UFUNCTION(BlueprintCallable)
+	static TArray<UInventoryItemRecipeCondition*> GetConditions(TSubclassOf<UInventoryItemRecipe> Recipe);
 };
