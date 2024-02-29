@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "InventoryBuffInfoBase.h"
+#include "ItemActor_Common.h"
 #include "UObject/Object.h"
 #include "InventorySettings.generated.h"
 
@@ -76,4 +77,7 @@ public:
 	
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TMap<FGameplayTag, TSoftClassPtr<UInventoryBuffInfoBase>> BuffInfos;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	TSubclassOf<AItemActor_Common> ItemActorBP_Class;
 };

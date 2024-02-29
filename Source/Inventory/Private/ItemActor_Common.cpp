@@ -5,17 +5,22 @@
 
 #include "InventoryFragment_SkeletalMesh.h"
 #include "InventoryFragment_StaticMesh.h"
+#include "InventorySubsystem.h"
+#include "WorldPartition/WorldPartitionLevelStreamingPolicy.h"
+#include "WorldPartition/WorldPartitionSubsystem.h"
 
 
 AItemActor_Common::AItemActor_Common(const FObjectInitializer& ObjectInitializer)
 	: AItemActor_Base(ObjectInitializer)
 {
+	PrimaryActorTick.bStartWithTickEnabled = false;
 	PrimaryActorTick.bCanEverTick = false;
 	SkeletalMeshComp = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalMesh"));
 	StaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StaticMesh"));
 	//SkeletalMeshComp->SetIsReplicated(true);
 	//StaticMeshComp->SetIsReplicated(true);
 	SetRootComponent(StaticMeshComp);
+	bAlwaysRelevant = true;
 }
 
 void AItemActor_Common::OnRep_ItemID()
@@ -76,8 +81,24 @@ void AItemActor_Common::OnConstruction(const FTransform& Transform)
 void AItemActor_Common::BeginPlay()
 {
 	Super::BeginPlay();
+	
 	if (HasAuthority())
 	{
 		SetUp(GetTransform());
+	}
+
+	if (const auto InventorySubsystem = GetWorld()->GetSubsystem<UInventorySubsystem>())
+	{
+		InventorySubsystem->RegisterItemActorToLoadedPool(this);
+	}
+}
+
+void AItemActor_Common::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+
+	if (const auto InventorySubsystem = GetWorld()->GetSubsystem<UInventorySubsystem>())
+	{
+		InventorySubsystem->ItemActorDestroyed(this);
 	}
 }

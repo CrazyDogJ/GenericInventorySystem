@@ -20,6 +20,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	USkeletalMeshComponent* SkeletalMeshComp;
+
+	UPROPERTY()
+	UPrimitiveComponent* PrimitiveRootComponent;
 	
 	virtual void OnRep_ItemID() override;
 
@@ -32,4 +35,6 @@ protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	virtual void BeginPlay() override;
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 };
