@@ -40,6 +40,11 @@ void UInventorySubsystem::LoadData(TArray<FInventoryItemInfo> Data)
 	NotLoadedItemActors = Data;
 }
 
+void UInventorySubsystem::ClearUnloadedItemActors()
+{
+	NotLoadedItemActors.Empty();
+}
+
 bool UInventorySubsystem::IsCurrentCellLoaded(const FVector& InLocation) const
 {
 	const auto WorldPartitionSubsystem = GetWorld()->GetSubsystem<UWorldPartitionSubsystem>();
@@ -81,7 +86,7 @@ void UInventorySubsystem::Tick(float DeltaTime)
 	}
 
 	TArray<int32> IndexToRemove;
-	
+	//check which should spawn
 	for (int32 Index = 0; Index < NotLoadedItemActors.Num(); ++Index)
 	{
 		auto Actor = NotLoadedItemActors[Index];
@@ -90,15 +95,17 @@ void UInventorySubsystem::Tick(float DeltaTime)
 			IndexToRemove.Add(Index);
 		}
 	}
+	//begin spawn
 	for (const int32 RemoveIndex : IndexToRemove)
 	{
 		if (NotLoadedItemActors.IsValidIndex(RemoveIndex))
 		{
 			auto Actor = NotLoadedItemActors[RemoveIndex];
 			RegisterItemActorToLoadedPool(SpawnItemFromSaveData(Actor));
-			NotLoadedItemActors.RemoveAt(RemoveIndex);
+			NotLoadedItemActors.RemoveAtSwap(RemoveIndex, 1, false);
 		}
 	}
+	NotLoadedItemActors.Shrink();
 }
 
 AItemActor_Common* UInventorySubsystem::SpawnItemFromSaveData(const FInventoryItemInfo& Info)

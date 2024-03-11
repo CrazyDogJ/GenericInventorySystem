@@ -60,6 +60,12 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void LoadData(TArray<FInventoryItemInfo> Data);
+
+	/**
+	 * Used to refresh items out of loaded area.
+	 */
+	UFUNCTION(BlueprintCallable)
+	void ClearUnloadedItemActors();
 	
 	UFUNCTION(BlueprintPure)
 	TArray<FInventoryItemInfo> GetUnloadedItemActors()
