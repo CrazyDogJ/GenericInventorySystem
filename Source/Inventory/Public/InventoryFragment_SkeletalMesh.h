@@ -17,6 +17,9 @@ class INVENTORY_API UInventoryFragment_SkeletalMesh : public UInventoryItemFragm
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	USkeletalMesh* PickupSkeletalMesh;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	USkeletalMesh* PickupSkeletalMesh_Multiple;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	bool bEnableCollisionWithPlayer;

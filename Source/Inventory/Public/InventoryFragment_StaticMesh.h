@@ -19,6 +19,9 @@ public:
 	UStaticMesh* PickupStaticMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	UStaticMesh* PickupStaticMesh_Multiple;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	bool bEnableCollisionWithPlayer;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")

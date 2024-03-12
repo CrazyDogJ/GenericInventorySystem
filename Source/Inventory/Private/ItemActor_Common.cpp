@@ -42,7 +42,19 @@ void AItemActor_Common::SetUp(const FTransform& Transform)
 			if (const UInventoryFragment_StaticMesh* StaticMeshFragment = Cast<UInventoryFragment_StaticMesh>(UInventoryFunctionLibrary::FindItemDefinitionFragment(ItemID, UInventoryFragment_StaticMesh::StaticClass())))
 			{
 				StaticMeshComp->SetVisibility(true);
-				StaticMeshComp->SetStaticMesh(StaticMeshFragment->PickupStaticMesh);
+				UStaticMesh* Mesh = nullptr;
+				if (StaticMeshFragment->PickupStaticMesh)
+				{
+					if (StaticMeshFragment->PickupStaticMesh_Multiple && Amount > 1)
+					{
+						Mesh = StaticMeshFragment->PickupStaticMesh_Multiple;
+					}
+					else
+					{
+						Mesh = StaticMeshFragment->PickupStaticMesh;
+					}
+				}
+				StaticMeshComp->SetStaticMesh(Mesh);
 				SetPawnCollisionChannel(!StaticMeshFragment->bEnableCollisionWithPlayer);
 				StaticMeshComp->SetCollisionObjectType(ECC_Pawn);
 				StaticMeshComp->SetSimulatePhysics(StaticMeshFragment->bEnablePhysics);
@@ -55,7 +67,19 @@ void AItemActor_Common::SetUp(const FTransform& Transform)
 			if (const UInventoryFragment_SkeletalMesh* SkeletalMeshFragment = Cast<UInventoryFragment_SkeletalMesh>(UInventoryFunctionLibrary::FindItemDefinitionFragment(ItemID, UInventoryFragment_SkeletalMesh::StaticClass())))
 			{
 				SkeletalMeshComp->SetVisibility(true);
-				SkeletalMeshComp->SetSkeletalMesh(SkeletalMeshFragment->PickupSkeletalMesh);
+				USkeletalMesh* Mesh = nullptr;
+				if (SkeletalMeshFragment->PickupSkeletalMesh)
+				{
+					if (SkeletalMeshFragment->PickupSkeletalMesh_Multiple && Amount > 1)
+					{
+						Mesh = SkeletalMeshFragment->PickupSkeletalMesh_Multiple;
+					}
+					else
+					{
+						Mesh = SkeletalMeshFragment->PickupSkeletalMesh;
+					}
+				}
+				SkeletalMeshComp->SetSkeletalMesh(Mesh);
 				SetPawnCollisionChannel(!SkeletalMeshFragment->bEnableCollisionWithPlayer);
 				SkeletalMeshComp->SetCollisionObjectType(ECC_Pawn);
 				if (SkeletalMeshComp->GetPhysicsAsset() != nullptr)

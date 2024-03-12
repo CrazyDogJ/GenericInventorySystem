@@ -24,12 +24,20 @@ FInventoryGameplayTagSetting::FInventoryGameplayTagSetting(const FGameplayTag Ta
 
 UInventorySettings::UInventorySettings(const FObjectInitializer& obj)
 {
-	UGameplayTagsManager& Manager = UGameplayTagsManager::Get();
-	Manager.AddNativeGameplayTag(TEXT("InventoryQuality.Common"));
-	const FGameplayTag commonTag = FGameplayTag::RequestGameplayTag(TEXT("InventoryQuality.Common"));
-	const FQualitySetting Common = FQualitySetting(commonTag, FLinearColor::Gray, LOCTEXT("InventoryQualitySettingCommon", "Common"));
-	QualitySettings = TArray<FQualitySetting>{Common};
+	const FQualitySetting Common = MakeQualitySetting(TEXT("InventoryQuality.Common"), FLinearColor::Gray, LOCTEXT("InventoryQualitySettingCommon", "Common"));
+	const FQualitySetting Good = MakeQualitySetting(TEXT("InventoryQuality.Good"), FLinearColor::Gray, LOCTEXT("InventoryQualitySettingGood", "Good"));
+	const FQualitySetting Uncommon = MakeQualitySetting(TEXT("InventoryQuality.Uncommon"), FLinearColor::Gray, LOCTEXT("InventoryQualitySettingUncommon", "Uncommon"));
+	
+	QualitySettings = TArray<FQualitySetting>{Common, Good, Uncommon};
 	CustomDepthStencil = 6;
+}
+
+FQualitySetting UInventorySettings::MakeQualitySetting(FName TagName, FLinearColor Color, FText Name)
+{
+	UGameplayTagsManager& Manager = UGameplayTagsManager::Get();
+	Manager.AddNativeGameplayTag(TagName);
+	const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(TagName);
+	return FQualitySetting(Tag, Color, Name);
 }
 
 #undef LOCTEXT_NAMESPACE

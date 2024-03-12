@@ -69,6 +69,8 @@ class INVENTORY_API UInventorySettings : public UObject
 public:
 	UInventorySettings(const FObjectInitializer& obj);
 
+	FQualitySetting MakeQualitySetting(FName TagName, FLinearColor Color, FText Name);
+	
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TArray<FQualitySetting> QualitySettings;
 

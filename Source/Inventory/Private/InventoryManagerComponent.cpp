@@ -10,6 +10,7 @@
 #include "InventoryItemDefinition.h"
 #include "InventoryItemInstance_Equipment.h"
 #include "InventoryItemInstance_StatTags.h"
+#include "InventorySettings.h"
 #include "ItemActor_Common.h"
 #include "K2Node_SpawnActor.h"
 #include "Components/SphereComponent.h"
@@ -584,7 +585,18 @@ void UInventoryManagerComponent::CreateItemActorInFront_Implementation(TSubclass
 	FActorSpawnParameters spawnInfo;
 	spawnInfo.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	const FTransform actorTransform = FTransform(GetOwner()->GetActorForwardVector().ToOrientationRotator(), DropLocation);
-	if (const auto actor = GetWorld()->SpawnActorDeferred<AItemActor_Common>(AItemActor_Common::StaticClass(), actorTransform))
+
+	//use project settings cpp class or bp class
+	UClass* Class = AItemActor_Common::StaticClass();
+	if (const UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+	{
+		if (Settings->ItemActorBP_Class)
+		{
+			Class = Settings->ItemActorBP_Class;
+		}
+	}
+	
+	if (const auto actor = GetWorld()->SpawnActorDeferred<AItemActor_Common>(Class, actorTransform))
 	{
 		actor->ItemID = ItemDef;
 		actor->Amount = count;
