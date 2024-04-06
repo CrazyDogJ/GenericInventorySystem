@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "ObjectTools.h"
 #include "Modules/ModuleManager.h"
 
 class FInventoryModule : public IModuleInterface

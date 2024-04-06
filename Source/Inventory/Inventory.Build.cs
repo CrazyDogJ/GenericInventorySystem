@@ -34,17 +34,11 @@ public class Inventory : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Projects",
-				"InputCore",
-				"EditorFramework",
-				"UnrealEd",
-				"RHI",
-				"RenderCore",
-				"ToolMenus",
 				"CoreUObject",
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"Settings",
 				"GameplayAbilities",
 				"GameplayTags"
 				// ... add private dependencies that you statically link with here ...	

@@ -22,10 +22,10 @@ AInventoryItemSpawner::AInventoryItemSpawner(const FObjectInitializer& ObjectIni
 #if WITH_EDITOR
 	PreviewStaticMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PreviewStaticMesh"));
 	PreviewStaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	PreviewStaticMesh->AttachToComponent(SceneRootComponent, FAttachmentTransformRules::SnapToTargetIncludingScale);
+	PreviewStaticMesh->SetupAttachment(RootComponent);
 	PreviewSkeletalMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("PreviewSkeletalMesh"));
 	PreviewSkeletalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	PreviewSkeletalMesh->AttachToComponent(SceneRootComponent, FAttachmentTransformRules::SnapToTargetIncludingScale);
+	PreviewSkeletalMesh->SetupAttachment(RootComponent);
 #endif
 	
 }

@@ -6,9 +6,6 @@
 #include "InventoryFragment_SkeletalMesh.h"
 #include "InventoryFragment_StaticMesh.h"
 #include "InventorySubsystem.h"
-#include "WorldPartition/WorldPartitionLevelStreamingPolicy.h"
-#include "WorldPartition/WorldPartitionSubsystem.h"
-
 
 AItemActor_Common::AItemActor_Common(const FObjectInitializer& ObjectInitializer)
 	: AItemActor_Base(ObjectInitializer)
@@ -57,9 +54,13 @@ void AItemActor_Common::SetUp(const FTransform& Transform)
 				StaticMeshComp->SetStaticMesh(Mesh);
 				SetPawnCollisionChannel(!StaticMeshFragment->bEnableCollisionWithPlayer);
 				StaticMeshComp->SetCollisionObjectType(ECC_Pawn);
+				StaticMeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 				StaticMeshComp->SetSimulatePhysics(StaticMeshFragment->bEnablePhysics);
+				StaticMeshComp->SetGenerateOverlapEvents(true);
 				SkeletalMeshComp->SetSkeletalMesh(nullptr);
 				SkeletalMeshComp->SetVisibility(false);
+				SkeletalMeshComp->SetSimulatePhysics(false);
+				SkeletalMeshComp->SetGenerateOverlapEvents(false);
 				SetRootComponent(StaticMeshComp);
 				SkeletalMeshComp->SetWorldTransform(StaticMeshComp->GetComponentTransform());
 				SetActorTransform(Transform);
@@ -80,14 +81,18 @@ void AItemActor_Common::SetUp(const FTransform& Transform)
 					}
 				}
 				SkeletalMeshComp->SetSkeletalMesh(Mesh);
+				SkeletalMeshComp->SetGenerateOverlapEvents(true);
 				SetPawnCollisionChannel(!SkeletalMeshFragment->bEnableCollisionWithPlayer);
 				SkeletalMeshComp->SetCollisionObjectType(ECC_Pawn);
+				SkeletalMeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 				if (SkeletalMeshComp->GetPhysicsAsset() != nullptr)
 				{
 					SkeletalMeshComp->SetSimulatePhysics(SkeletalMeshFragment->bEnablePhysics);
 				}
+				StaticMeshComp->SetGenerateOverlapEvents(false);
 				StaticMeshComp->SetStaticMesh(nullptr);
 				StaticMeshComp->SetVisibility(false);
+				StaticMeshComp->SetSimulatePhysics(false);
 				SetRootComponent(SkeletalMeshComp);
 				StaticMeshComp->SetWorldTransform(SkeletalMeshComp->GetComponentTransform());
 				SetActorTransform(Transform,false,nullptr,ETeleportType::TeleportPhysics);

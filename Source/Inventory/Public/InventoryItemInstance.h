@@ -11,7 +11,7 @@ class UInventoryItemDefinition;
  * Inventory Item Instance that can be blueprintable in order to make custom events.
  */
 UCLASS(BlueprintType, Blueprintable)
-class INVENTORY_API UInventoryItemInstance : public UObject
+class INVENTORY_API UInventoryItemInstance : public UObject, public FTickableGameObject
 {
 	GENERATED_BODY()
 
@@ -21,7 +21,9 @@ public:
 	//~UObject interface
 	virtual bool IsSupportedForNetworking() const override { return true; }
 	virtual UWorld* GetWorld() const override final;
-
+	virtual void Tick(float DeltaTime) override;
+	virtual bool IsTickable() const override;
+	virtual TStatId GetStatId() const override;
 	//~End of UObject interface
 
 	UFUNCTION(BlueprintPure)
@@ -47,8 +49,14 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Instance Created")
 	void K2_OnInstanceCreated();
 
-	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Instance Created")
+	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Instance Destroyed")
 	void K2_OnInstanceDestroyed();
+
+	UFUNCTION(BlueprintImplementableEvent, DisplayName="Tick")
+	void K2_Tick(float deltaTime);
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool bUseTick = false;
 	
 	UFUNCTION(BlueprintPure)
 	TSubclassOf<UInventoryItemDefinition> GetItemDef() const

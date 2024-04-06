@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilitySet.h"
 #include "InventoryItemInstance_StatTags.h"
 #include "InventoryItemInstance_Equipment.generated.h"
 
@@ -15,6 +16,9 @@ class INVENTORY_API UInventoryItemInstance_Equipment : public UInventoryItemInst
 	GENERATED_BODY()
 
 public:
+	UPROPERTY(BlueprintReadOnly)
+	FAbilitySet_GrantedHandles GrantedHandles;
+	
 	virtual void OnEquipped();
 	virtual void OnUnequipped();
 	

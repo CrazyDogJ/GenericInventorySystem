@@ -3,16 +3,13 @@
 
 #include "InventoryManagerComponent.h"
 
-#include "InventoryFragment_Equipment.h"
 #include "InventoryFragment_SkeletalMesh.h"
 #include "InventoryFragment_StaticMesh.h"
-#include "InventoryFragment_Stats.h"
 #include "InventoryItemDefinition.h"
 #include "InventoryItemInstance_Equipment.h"
 #include "InventoryItemInstance_StatTags.h"
 #include "InventorySettings.h"
 #include "ItemActor_Common.h"
-#include "K2Node_SpawnActor.h"
 #include "Components/SphereComponent.h"
 #include "Engine/ActorChannel.h"
 #include "Net/UnrealNetwork.h"
@@ -335,6 +332,7 @@ int FInventoryList::GetTotalItemAmount(TSubclassOf<UInventoryItemDefinition> Ite
 UInventoryManagerComponent::UInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	bAllowAnyoneToDestroyMe = true;
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
 }
@@ -350,8 +348,6 @@ void UInventoryManagerComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProp
 
 void UInventoryManagerComponent::BeginPlay()
 {
-	Super::BeginPlay();
-
 	if (this)
 	{
 		InventoryList.OwnerComponent = this;
@@ -372,6 +368,8 @@ void UInventoryManagerComponent::BeginPlay()
 	SphereComp->SetSphereRadius(CanPickUpItemRadius);
 	SphereComp->OnComponentBeginOverlap.AddDynamic(this, &UInventoryManagerComponent::OnOverlapBegin);
 	SphereComp->OnComponentEndOverlap.AddDynamic(this, &UInventoryManagerComponent::OnOverlapEnd);
+
+	Super::BeginPlay();
 }
 
 void UInventoryManagerComponent::OnRep_SelectedQuickBarIndex()

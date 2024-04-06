@@ -16,10 +16,10 @@ class INVENTORY_API UInventoryFragment_Equipment : public UInventoryItemFragment
 
 public:
 
-	UPROPERTY(EditDefaultsOnly, Category=Equipment)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category=Equipment)
 	TArray<TObjectPtr<const UAbilitySet>> AbilitySetsToGrant;
 
-	UPROPERTY(EditDefaultsOnly, Category=Equipment)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category=Equipment)
 	TSubclassOf<AActor> WeaponActorToSpawn;
 
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = Equipment)

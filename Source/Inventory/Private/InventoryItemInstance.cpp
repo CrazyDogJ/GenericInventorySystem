@@ -23,6 +23,22 @@ UWorld* UInventoryItemInstance::GetWorld() const
 	}
 }
 
+void UInventoryItemInstance::Tick(float DeltaTime)
+{
+	//native tick here
+	K2_Tick(DeltaTime);
+}
+
+bool UInventoryItemInstance::IsTickable() const
+{
+	return bUseTick;
+}
+
+TStatId UInventoryItemInstance::GetStatId() const
+{
+	return Super::GetStatID();
+}
+
 APawn* UInventoryItemInstance::GetPawn() const
 {
 	return Cast<APawn>(GetOuter());
