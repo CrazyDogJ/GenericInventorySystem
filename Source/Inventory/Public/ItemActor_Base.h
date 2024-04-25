@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "InventoryItemInstance.h"
 #include "GameFramework/Actor.h"
+#include "GameplayTagStack.h"
 #include "ItemActor_Base.generated.h"
 
 UCLASS()

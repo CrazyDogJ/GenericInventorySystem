@@ -6,6 +6,7 @@
 #include "InventoryItemDefinition.h"
 #include "InventoryFragment_Equipment.generated.h"
 
+class UAbilitySet;
 /**
  * 
  */

@@ -4,9 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "InventoryItemDefinition.h"
+#include "GameplayTagContainer.h"
 #include "InventoryFragment_Stats.generated.h"
 
-struct FGameplayTag;
 class UInventoryItemInstance;
 class UObject;
 

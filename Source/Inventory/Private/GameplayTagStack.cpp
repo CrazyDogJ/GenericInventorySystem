@@ -32,7 +32,7 @@ void FGameplayTagStackContainer::AddStack(FGameplayTag Tag, float StackCount)
 		{
 			if (Stack.Tag == Tag)
 			{
-				const int32 NewCount = Stack.TagFloatValue + StackCount;
+				const float NewCount = Stack.TagFloatValue + StackCount;
 				Stack.TagFloatValue = NewCount;
 				TagToCountMap[Tag] = NewCount;
 				MarkItemDirty(Stack);
@@ -70,7 +70,7 @@ void FGameplayTagStackContainer::RemoveStack(FGameplayTag Tag, float StackCount)
 				}
 				else
 				{
-					const int32 NewCount = Stack.TagFloatValue - StackCount;
+					const float NewCount = Stack.TagFloatValue - StackCount;
 					Stack.TagFloatValue = NewCount;
 					TagToCountMap[Tag] = NewCount;
 					MarkItemDirty(Stack);

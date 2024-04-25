@@ -344,6 +344,7 @@ void UInventoryManagerComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProp
 	DOREPLIFETIME(ThisClass, InventoryList);
 	DOREPLIFETIME(ThisClass, SelectedQuickBarIndex);
 	DOREPLIFETIME(ThisClass, KnownRecipes);
+	DOREPLIFETIME(ThisClass, bForceUnequipped);
 }
 
 void UInventoryManagerComponent::BeginPlay()
@@ -628,6 +629,24 @@ void UInventoryManagerComponent::ChangeQuickBarIndex_Server_Implementation(int i
 	{
 		SelectedQuickBarIndex = index;
 		OnRep_SelectedQuickBarIndex();
+	}
+}
+
+void UInventoryManagerComponent::ForceUnequipItem_Implementation()
+{
+	if (bForceUnequipped == false)
+	{
+		Cast<UInventoryItemInstance_Equipment>(EquippedInstance)->OnUnequipped();
+		bForceUnequipped = true;
+	}
+}
+
+void UInventoryManagerComponent::CancelForceUnequipItem_Implementation()
+{
+	if (bForceUnequipped == true)
+	{
+		Cast<UInventoryItemInstance_Equipment>(EquippedInstance)->OnEquipped();
+		bForceUnequipped = false;
 	}
 }
 

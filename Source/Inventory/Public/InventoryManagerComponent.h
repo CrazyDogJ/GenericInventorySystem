@@ -243,6 +243,15 @@ public:
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
 	void ChangeQuickBarIndex_Server(int index);
 
+	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
+	void ForceUnequipItem();
+
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = Inventory)
+	bool bForceUnequipped;
+	
+	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
+	void CancelForceUnequipItem();
+
 	UFUNCTION(BlueprintImplementableEvent, DisplayName = "On Unable To Drop Item")
 	void K2_UnableToDropItem();
 
