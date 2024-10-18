@@ -1,10 +1,10 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "InventoryFragment_Stats.h"
+#include "Fragments/InventoryFragment_Stats.h"
 
 #include "GameplayTagContainer.h"
-#include "InventoryItemInstance_StatTags.h"
+#include "ItemInstances/InventoryItemInstance_StatTags.h"
 
 void UInventoryFragment_Stats::OnInstanceCreated(UInventoryItemInstance* Instance) const
 {

@@ -3,8 +3,6 @@
 
 #include "InventoryBuffInfoBase.h"
 
-#include <string>
-
 FText UInventoryBuffInfoBase::DescriptionOverride_Implementation(const float Value)
 {
 	return Description;

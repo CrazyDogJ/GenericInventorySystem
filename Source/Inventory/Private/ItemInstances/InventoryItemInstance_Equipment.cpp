@@ -1,11 +1,11 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "InventoryItemInstance_Equipment.h"
+#include "ItemInstances/InventoryItemInstance_Equipment.h"
 
 #include "AbilitySet.h"
 #include "AbilitySystemGlobals.h"
-#include "InventoryFragment_Equipment.h"
+#include "Fragments/InventoryFragment_Equipment.h"
 
 void UInventoryItemInstance_Equipment::OnEquipped()
 {
@@ -23,4 +23,11 @@ void UInventoryItemInstance_Equipment::OnUnequipped()
 	const auto ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Cast<AActor>(GetOuter()));
 	GrantedHandles.TakeFromAbilitySystem(ASC);
 	K2_OnUnequipped();
+}
+
+void UInventoryItemInstance_Equipment::OnInstanceDestroyed()
+{
+	OnUnequipped();
+	
+	Super::OnInstanceDestroyed();
 }

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "InventoryItemInstance.h"
+#include "ItemInstances/InventoryItemInstance.h"
 #include "UObject/Object.h"
 #include "InventoryItemDefinition.generated.h"
 
@@ -32,12 +32,17 @@ class INVENTORY_API UInventoryItemDefinition : public UObject
 public:
 	UInventoryItemDefinition(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+#define LOCTEXT_NAMESPACE "Inventory"
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
-	FText DisplayName;
+	FString ItemID;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
+	FText DisplayName = LOCTEXT("", "");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
-	FText ItemDescription = FText::GetEmpty();
-
+	FText ItemDescription = LOCTEXT("", "");
+#undef LOCTEXT_NAMESPACE
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
 	int MaxStackAmount = 1;
 
@@ -49,23 +54,15 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
 	TSubclassOf<UInventoryItemInstance> Instance_BP;
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 	
-	//Used in blueprint function library below.
-	const UInventoryItemFragment* FindFragmentByClass(TSubclassOf<UInventoryItemFragment> FragmentClass) const;
-};
+	//Used in blueprint function library.
+	const UInventoryItemFragment* FindFragmentByClass(const TSubclassOf<UInventoryItemFragment>& FragmentClass) const;
 
-UCLASS()
-class UInventoryFunctionLibrary : public UBlueprintFunctionLibrary
-{
-	GENERATED_BODY()
-
-public:
-	/**
-	 * Get item definition fragment by class from default item definition.
-	 * @param ItemDef 
-	 * @param FragmentClass 
-	 * @return FragmentObject
-	 */
-	UFUNCTION(BlueprintCallable, meta=(DeterminesOutputType=FragmentClass))
-	static const UInventoryItemFragment* FindItemDefinitionFragment(TSubclassOf<UInventoryItemDefinition> ItemDef, TSubclassOf<UInventoryItemFragment> FragmentClass);
+	//Used in c++ function.
+	template <typename T>
+	const T* FindFragmentByClass() const;
 };

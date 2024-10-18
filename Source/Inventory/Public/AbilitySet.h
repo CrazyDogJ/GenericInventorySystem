@@ -65,9 +65,9 @@ public:
 
 	void AddAbilitySpecHandle(const FGameplayAbilitySpecHandle& Handle);
 	void AddGameplayEffectHandle(const FActiveGameplayEffectHandle& Handle);
-	void AddAttributeSet(UAttributeSet* Set);
+	void AddAttributeSet(const TObjectPtr<UAttributeSet>& Set);
 
-	void TakeFromAbilitySystem(UAbilitySystemComponent* ASC);
+	void TakeFromAbilitySystem(const TObjectPtr<UAbilitySystemComponent>& ASC);
 
 protected:
 
@@ -85,7 +85,7 @@ protected:
 };
 
 /**
- * 
+ * Store abilities and effects for GAS.
  */
 UCLASS()
 class INVENTORY_API UAbilitySet : public UPrimaryDataAsset
@@ -98,7 +98,8 @@ public:
 
 	// Grants the ability set to the specified ability system component.
 	// The returned handles can be used later to take away anything that was granted.
-	void GiveToAbilitySystem(UAbilitySystemComponent* ASC, FAbilitySet_GrantedHandles* OutGrantedHandles, UObject* SourceObject = nullptr) const;
+	void GiveToAbilitySystem(const TObjectPtr<UAbilitySystemComponent>& ASC, FAbilitySet_GrantedHandles* OutGrantedHandles, const TObjectPtr<
+	                         UObject>& SourceObject = nullptr) const;
 
 protected:
 

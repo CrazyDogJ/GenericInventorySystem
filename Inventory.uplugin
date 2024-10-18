@@ -29,6 +29,10 @@
 		{
 			"Name": "GameplayTagsEditor",
 			"Enabled": true
+		},
+		{
+			"Name": "Water",
+			"Enabled": true
 		}
 	]
 }

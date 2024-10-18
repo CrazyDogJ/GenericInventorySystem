@@ -12,8 +12,8 @@ FQualitySetting::FQualitySetting(const FGameplayTag Tag, const FLinearColor Colo
 	QualityName = Name;
 }
 
-FInventoryGameplayTagSetting::FInventoryGameplayTagSetting(const FGameplayTag Tag, const FText LocName,
-	const FText LocDesc)
+FInventoryGameplayTagSetting::FInventoryGameplayTagSetting(const FGameplayTag Tag, const FText& LocName,
+	const FText& LocDesc)
 {
 	OtherGameplayTag = Tag;
 	OtherGameplayTagLocName = LocName;
@@ -32,12 +32,17 @@ UInventorySettings::UInventorySettings(const FObjectInitializer& obj)
 	CustomDepthStencil = 6;
 }
 
-FQualitySetting UInventorySettings::MakeQualitySetting(FName TagName, FLinearColor Color, FText Name)
+FQualitySetting UInventorySettings::MakeQualitySetting(FName TagName, FLinearColor Color, const FText& Name)
 {
 	UGameplayTagsManager& Manager = UGameplayTagsManager::Get();
 	Manager.AddNativeGameplayTag(TagName);
 	const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(TagName);
 	return FQualitySetting(Tag, Color, Name);
+}
+
+TSubclassOf<AItemActor_Base> UInventorySettings::GetDynamicItemActorClass() const
+{
+	return DynamicItemActorClass.TryLoadClass<AItemActor_Base>();
 }
 
 #undef LOCTEXT_NAMESPACE

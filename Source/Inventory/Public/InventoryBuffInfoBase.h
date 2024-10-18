@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "InventoryItemInstance_StatTags.h"
+#include "ItemInstances/InventoryItemInstance_StatTags.h"
 #include "UObject/Object.h"
 #include "InventoryBuffInfoBase.generated.h"
 

@@ -1,7 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "InventoryItemRecipe.h"
+#include "Crafting/InventoryItemRecipe.h"
 
 UInventoryItemRecipe::UInventoryItemRecipe(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)

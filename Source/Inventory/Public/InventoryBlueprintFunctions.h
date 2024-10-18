@@ -15,6 +15,7 @@ class INVENTORY_API UInventoryBlueprintFunctions : public UBlueprintFunctionLibr
 {
 	GENERATED_BODY()
 
+public:
 	UFUNCTION(BlueprintPure, Category = Inventory)
 	static TArray<FQualitySetting> GetQualitySettings();
 
@@ -43,5 +44,17 @@ class INVENTORY_API UInventoryBlueprintFunctions : public UBlueprintFunctionLibr
 	static FText GetDescriptionFromBuffObject(FGameplayTagStack Tag);
 
 	UFUNCTION(BlueprintCallable, Category = Inventory)
-	static TArray<FGameplayTagStack> GetStatTags(FGameplayTagStackContainer InContainer) {return InContainer.GetTagStacks();};
+	static TArray<FGameplayTagStack> GetStatTags(FGameplayTagStackContainer InContainer) {return InContainer.GetTagStacks();}
+
+	/**
+	 * Get item definition fragment by class from default item definition.
+	 * @param ItemDef 
+	 * @param FragmentClass 
+	 * @return FragmentObject
+	 */
+	UFUNCTION(BlueprintCallable, meta=(DeterminesOutputType=FragmentClass))
+	static const UInventoryItemFragment* FindItemDefinitionFragment(TSubclassOf<UInventoryItemDefinition> ItemDef, TSubclassOf<UInventoryItemFragment> FragmentClass);
+
+private:
+	static TObjectPtr<UInventorySettings> GetInventoryProjectSettings();
 };

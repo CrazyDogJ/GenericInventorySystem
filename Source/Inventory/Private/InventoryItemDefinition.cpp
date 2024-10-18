@@ -8,8 +8,28 @@ UInventoryItemDefinition::UInventoryItemDefinition(const FObjectInitializer& Obj
 {
 }
 
+#if WITH_EDITOR
+// Localization
+void UInventoryItemDefinition::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	UObject::PostEditChangeProperty(PropertyChangedEvent);
+
+#define LOCTEXT_NAMESPACE "Inventory"
+	FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(UInventoryItemDefinition, ItemID))
+	{
+		// 当 ItemID 发生变化时，更新 ItemName 和 ItemDescription
+		FTextKey Name = FString::Printf(TEXT("IDN_%s"), *ItemID);
+		FTextKey Desc = FString::Printf(TEXT("IDD_%s"), *ItemID);
+		DisplayName = DisplayName.ChangeKey(TEXT("Inventory"), Name, DisplayName);
+		ItemDescription = ItemDescription.ChangeKey(TEXT("Inventory"), Desc, ItemDescription);
+	}
+#undef LOCTEXT_NAMESPACE
+}
+#endif
+
 const UInventoryItemFragment* UInventoryItemDefinition::FindFragmentByClass(
-	TSubclassOf<UInventoryItemFragment> FragmentClass) const
+	const TSubclassOf<UInventoryItemFragment>& FragmentClass) const
 {
 	if (FragmentClass != nullptr)
 	{
@@ -25,11 +45,18 @@ const UInventoryItemFragment* UInventoryItemDefinition::FindFragmentByClass(
 	return nullptr;
 }
 
-const UInventoryItemFragment* UInventoryFunctionLibrary::FindItemDefinitionFragment(TSubclassOf<UInventoryItemDefinition> ItemDef, TSubclassOf<UInventoryItemFragment> FragmentClass)
+template <typename T>
+const T* UInventoryItemDefinition::FindFragmentByClass() const
 {
-	if ((ItemDef != nullptr) && (FragmentClass != nullptr))
+	static_assert(TIsDerivedFrom<T, UInventoryItemFragment>::IsDerived, "T must be derived from UMyClass");
+	
+	for (const UInventoryItemFragment* Fragment : Fragments)
 	{
-		return GetDefault<UInventoryItemDefinition>(ItemDef)->FindFragmentByClass(FragmentClass);
+		if (auto Out = Cast<T>(Fragment))
+		{
+			return Out;
+		}
 	}
+
 	return nullptr;
 }

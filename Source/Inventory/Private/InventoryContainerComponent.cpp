@@ -4,6 +4,8 @@
 #include "InventoryContainerComponent.h"
 
 #include "InventoryItemDefinition.h"
+#include "InventoryManagerComponent.h"
+#include "ItemInstances/InventoryItemInstance_StatTags.h"
 #include "Net/UnrealNetwork.h"
 
 class FLifetimeProperty;
@@ -40,21 +42,19 @@ void UInventoryContainerComponent::RemoveItem(int Count, int SlotIndex)
 
 void UInventoryContainerComponent::GenerateLoot()
 {
-    if (bGenerateLoot)
+    if (!bGenerateLoot || GeneratedLootItems.Num() <= 0)
     {
-        if (GeneratedLootItems.Num() > 0)
+        return;
+    }
+
+    for (FItemProbabilitySetting Setting : GeneratedLootItems)
+    {
+        if (Setting.ItemID != nullptr)
         {
-            for (FItemProbabilitySetting Setting : GeneratedLootItems)
+            if (FMath::RandRange(0.f, 1.f) < Setting.ItemProbability)
             {
-                if (Setting.ItemID != nullptr)
-                {
-                    if (FMath::RandRange(0.f, 1.f) < Setting.ItemProbability)
-                    {
-                        const int AddCount = FMath::RandRange(Setting.GenerateCountMin, Setting.GenerateCountMax);
-                        FGameplayTagStackContainer EmptyContainer;
-                        AddItem(Setting.ItemID, AddCount, EmptyContainer, -1);
-                    }
-                }
+                const int AddCount = FMath::RandRange(Setting.GenerateCountMin, Setting.GenerateCountMax);
+                AddItem(Setting.ItemID, AddCount, FGameplayTagStackContainer(), -1);
             }
         }
     }
@@ -62,11 +62,86 @@ void UInventoryContainerComponent::GenerateLoot()
     bGenerateLoot = false;
 }
 
+void UInventoryContainerComponent::DragDropItem(int DragIndex, int DropIndex)
+{
+    List.DragDropItem(DragIndex, DropIndex);
+}
+
+void UInventoryContainerComponent::DragItemToInventory(UInventoryManagerComponent* InventoryManager,
+    int DragIndex, int DropIndex)
+{
+    //check valid ptr
+    if (!InventoryManager)
+    {
+        return;
+    }
+    
+    if (!List.Slots.IsValidIndex(DragIndex) || !InventoryManager->InventoryList.Slots.IsValidIndex(DropIndex))
+    {
+        return;
+    }
+	
+    if (List.Slots[DragIndex].ItemID != nullptr
+        && InventoryManager->InventoryList.Slots[DropIndex].Instance != nullptr
+        && List.Slots[DragIndex].ItemID == InventoryManager->InventoryList.Slots[DropIndex].Instance->GetItemDef())
+    {
+        //Stack
+        const int maxStackAmount = List.Slots[DragIndex].ItemID.GetDefaultObject()->MaxStackAmount;
+        const int finalAmount = InventoryManager->InventoryList.Slots[DropIndex].StackCount + List.Slots[DragIndex].StackCount;
+        const int calculateAmount = finalAmount - maxStackAmount;
+        if (InventoryManager->InventoryList.Slots[DropIndex].StackCount != maxStackAmount)
+        {
+            if (calculateAmount > 0)
+            {
+                InventoryManager->InventoryList.Slots[DropIndex].StackCount = maxStackAmount;
+                List.Slots[DragIndex].StackCount = calculateAmount;
+            }
+            else
+            {
+                InventoryManager->InventoryList.Slots[DropIndex].StackCount = finalAmount;
+                RemoveItem(DragIndex, List.Slots[DragIndex].StackCount);
+            }
+            //Rep net
+            InventoryManager->InventoryList.MarkItemDirty(InventoryManager->InventoryList.Slots[DropIndex]);
+            List.MarkItemDirty(List.Slots[DragIndex]);
+            InventoryManager->K2_InventoryListChanged();
+            return;
+        }
+    }
+	
+    //Switch
+    auto StackCount = InventoryManager->InventoryList.Slots[DragIndex].StackCount;
+    auto Instance = Cast<UInventoryItemInstance_StatTags>(InventoryManager->InventoryList.Slots[DropIndex].Instance);
+    FContainerSlot Slot = List.Slots[DragIndex];
+    FGameplayTagStackContainer TagStacks;
+    TSubclassOf<UInventoryItemDefinition> DragItemDef = nullptr;
+    if (InventoryManager->InventoryList.Slots[DropIndex].Instance)
+    {
+        DragItemDef = InventoryManager->InventoryList.Slots[DragIndex].Instance->GetItemDef();
+    }
+    if (Instance)
+    {
+        TagStacks = Instance->GetStatTagsContainer();
+    }
+    SetItem(DragItemDef, StackCount, TagStacks, DragIndex);
+    InventoryManager->RemoveItem(DropIndex, StackCount);
+    InventoryManager->InventoryList.SetItemAt(Slot.ItemID, Slot.StackCount, Slot.StackTagContainer.GetTagStacks(), DropIndex);
+}
+
 void UInventoryContainerComponent::BeginPlay()
 {
-    Super::BeginPlay();
+    if (this)
+    {
+        List.OwnerComponent = this;
+    }
 
-    Initialize();
+    if (GetOwnerRole() == ROLE_Authority)
+    {
+        List.Slots.SetNum(EmptySlotAmount);
+        List.MarkArrayDirty();
+    }
+    
+    Super::BeginPlay();
 }
 
 void UInventoryContainerComponent::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
@@ -78,20 +153,23 @@ void UInventoryContainerComponent::GetLifetimeReplicatedProps(TArray< FLifetimeP
 
 void FContainerList::PreReplicatedRemove(const TArrayView<int32> RemovedIndices, int32 FinalSize)
 {
-
+    // ReSharper disable once CppExpressionWithoutSideEffects
+    Cast<UInventoryContainerComponent>(OwnerComponent)->OnContainerListChanged.Broadcast();
 }
 
 void FContainerList::PostReplicatedAdd(const TArrayView<int32> AddedIndices, int32 FinalSize)
 {
-
+    // ReSharper disable once CppExpressionWithoutSideEffects
+    Cast<UInventoryContainerComponent>(OwnerComponent)->OnContainerListChanged.Broadcast();
 }
 
 void FContainerList::PostReplicatedChange(const TArrayView<int32> ChangedIndices, int32 FinalSize)
 {
-
+    // ReSharper disable once CppExpressionWithoutSideEffects
+    Cast<UInventoryContainerComponent>(OwnerComponent)->OnContainerListChanged.Broadcast();
 }
 
-void FContainerList::SetItem(TSubclassOf<UInventoryItemDefinition> ItemID, int Count, FGameplayTagStackContainer Tags, int SlotIndex)
+void FContainerList::SetItem(const TSubclassOf<UInventoryItemDefinition>& ItemID, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex)
 {
 	FContainerSlot Slot;
 	Slot.ItemID = ItemID;
@@ -107,7 +185,7 @@ void FContainerList::InitializeList(int EmptySlotAmount)
 	MarkArrayDirty();
 }
 
-int FContainerList::FindEmpty()
+int FContainerList::FindEmpty() const
 {
     const int index = Slots.IndexOfByPredicate([](const FContainerSlot& InItem)
     {
@@ -116,98 +194,82 @@ int FContainerList::FindEmpty()
     return index;
 }
 
-void FContainerList::FindStack(TSubclassOf<UInventoryItemDefinition> ItemDef, int& index, int& remainAmount)
+void FContainerList::FindStack(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int& index, int& remainAmount)
 {
-    int id = 0;
-
     index = -1;
     remainAmount = -1;
-    if (ItemDef != nullptr)
+
+    if (ItemDef == nullptr)
     {
-        bool found = false;
-        for (FContainerSlot Slot : Slots)
-        {
-            if (Slot.ItemID != nullptr)
-            {
-                if (Slot.ItemID == ItemDef && Slot.StackCount < ItemDef.GetDefaultObject()->MaxStackAmount && found == false)
-                {
-                    found = true;
-                    index = id;
-                    remainAmount = ItemDef.GetDefaultObject()->MaxStackAmount - Slot.StackCount;
-                }
-                else
-                {
-                    id++;
-                }
-            }
-        }
-    }
-    else
-    {
-        // no stack info;
         return;
     }
+
+    index = Slots.IndexOfByPredicate([&ItemDef](const FContainerSlot& InItem)
+    {
+        return InItem.ItemID == ItemDef && InItem.StackCount < ItemDef.GetDefaultObject()->MaxStackAmount;
+    });
+
+    if (index < 0)
+    {
+        return;
+    }
+    
+    remainAmount = ItemDef.GetDefaultObject()->MaxStackAmount - Slots[index].StackCount;
 }
 
-int FContainerList::AddItem(TSubclassOf<UInventoryItemDefinition> ItemDef, int Count, FGameplayTagStackContainer Tags, int SlotIndex /*= -1*/)
+int FContainerList::AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex /*= -1*/)
 {
-    if (ItemDef != nullptr)
-    {
-        //寻找堆叠项目
-        int FindStackRemainAmount;
-        int FindStackIndex;
-        FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
-
-        while (FindStackIndex >= 0 && Count > 0)
-        {
-            FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
-            if (FindStackRemainAmount >= Count)
-            {
-                Slots[FindStackIndex].StackCount += Count;
-                MarkItemDirty(Slots[FindStackIndex]);
-                Count = 0;
-            }
-            else if (FindStackIndex >= 0)
-            {
-                Slots[FindStackIndex].StackCount += FindStackRemainAmount;
-                MarkItemDirty(Slots[FindStackIndex]);
-                Count -= FindStackRemainAmount;
-            }
-        };
-        //完成寻找堆叠项目
-        if (Count <= 0)
-        {
-            return 0;
-        }
-        //开始寻找空位逻辑
-        else
-        {
-            int FindEmptyIndex;
-            FindEmptyIndex = FindEmpty();
-            //循环，直到空位被填完
-            while (FindEmptyIndex >= 0 && Count > 0)
-            {
-                FContainerSlot Slot;
-                Slot.ItemID = ItemDef;
-                Slot.StackCount = (Count >= ItemDef.GetDefaultObject()->MaxStackAmount) ? ItemDef.GetDefaultObject()->MaxStackAmount : Count;
-                Count -= (Count >= ItemDef.GetDefaultObject()->MaxStackAmount) ? ItemDef.GetDefaultObject()->MaxStackAmount : Count;
-
-                //如果有TagStack就设置，没有就原Def
-                if (Tags.GetTagStacks().Num() > 0)
-                {
-                    Slot.StackTagContainer = Tags;
-                }
-                Slots[(SlotIndex >= 0) ? SlotIndex : FindEmptyIndex] = Slot;
-                MarkItemDirty(Slots[(SlotIndex >= 0) ? SlotIndex : FindEmptyIndex]);
-                FindEmptyIndex = FindEmpty();
-            }
-            return Count;
-        }
-    }
-    else
+    if (ItemDef == nullptr || Count <= 0)
     {
         return -1;
     }
+    
+    //寻找堆叠项目
+    int FindStackRemainAmount;
+    int FindStackIndex;
+    FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
+
+    while (FindStackIndex >= 0 && Count > 0)
+    {
+        FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
+        if (FindStackRemainAmount >= Count)
+        {
+            Slots[FindStackIndex].StackCount += Count;
+            MarkItemDirty(Slots[FindStackIndex]);
+            Count = 0;
+        }
+        else if (FindStackIndex >= 0)
+        {
+            Slots[FindStackIndex].StackCount += FindStackRemainAmount;
+            MarkItemDirty(Slots[FindStackIndex]);
+            Count -= FindStackRemainAmount;
+        }
+    };
+    //完成寻找堆叠项目
+    if (Count <= 0)
+    {
+        return 0;
+    }
+    //开始寻找空位逻辑
+    int FindEmptyIndex = FindEmpty();
+    //循环，直到空位被填完
+    while (FindEmptyIndex >= 0 && Count > 0)
+    {
+        FContainerSlot Slot;
+        Slot.ItemID = ItemDef;
+        Slot.StackCount = (Count >= ItemDef.GetDefaultObject()->MaxStackAmount) ? ItemDef.GetDefaultObject()->MaxStackAmount : Count;
+        Count -= (Count >= ItemDef.GetDefaultObject()->MaxStackAmount) ? ItemDef.GetDefaultObject()->MaxStackAmount : Count;
+
+        //如果有TagStack就设置，没有就原Def
+        if (Tags.GetTagStacks().Num() > 0)
+        {
+            Slot.StackTagContainer = Tags;
+        }
+        Slots[(SlotIndex >= 0) ? SlotIndex : FindEmptyIndex] = Slot;
+        MarkItemDirty(Slots[(SlotIndex >= 0) ? SlotIndex : FindEmptyIndex]);
+        FindEmptyIndex = FindEmpty();
+    }
+    return Count;
 }
 
 void FContainerList::RemoveItem(int Count, int SlotIndex)
@@ -215,11 +277,63 @@ void FContainerList::RemoveItem(int Count, int SlotIndex)
     if (Slots[SlotIndex].StackCount >= 1)
     {
         Slots[SlotIndex].StackCount -= Count;
-        MarkItemDirty(Slots[SlotIndex]);
     }
     if (Slots[SlotIndex].StackCount <= 0)
     {
         FContainerSlot EmptySlot;
         Slots[SlotIndex] = EmptySlot;
     }
+    MarkItemDirty(Slots[SlotIndex]);
+}
+
+void FContainerList::DragDropItem(int DragIndex, int DropIndex)
+{
+    //check valid ptr
+    if (DragIndex == DropIndex)
+    {
+        return;
+    }
+	
+    if (!Slots.IsValidIndex(DragIndex) || !Slots.IsValidIndex(DropIndex))
+    {
+        return;
+    }
+
+    //Stack
+    if (Slots[DragIndex].ItemID != nullptr
+        && Slots[DropIndex].ItemID != nullptr
+        && Slots[DragIndex].ItemID == Slots[DropIndex].ItemID)
+    {
+        //Stack
+        const int maxStackAmount = Slots[DragIndex].ItemID.GetDefaultObject()->MaxStackAmount;
+        const int finalAmount = Slots[DropIndex].StackCount + Slots[DragIndex].StackCount;
+        const int calculateAmount = finalAmount - maxStackAmount;
+        if (Slots[DropIndex].StackCount != maxStackAmount)
+        {
+            if (calculateAmount > 0)
+            {
+                Slots[DropIndex].StackCount = maxStackAmount;
+                Slots[DragIndex].StackCount = calculateAmount;
+            }
+            else
+            {
+                Slots[DropIndex].StackCount = finalAmount;
+                RemoveItem(DragIndex, Slots[DragIndex].StackCount);
+            }
+            //Rep net
+            MarkItemDirty(Slots[DropIndex]);
+            MarkItemDirty(Slots[DragIndex]);
+
+            return;
+        }
+    }
+	
+    //Switch
+    const FContainerSlot Slot = Slots[DropIndex];
+    Slots[DropIndex] = Slots[DragIndex];
+    Slots[DragIndex] = Slot;
+	
+    //Rep net
+    MarkItemDirty(Slots[DropIndex]);
+    MarkItemDirty(Slots[DragIndex]);
 }

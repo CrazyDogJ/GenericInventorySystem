@@ -4,20 +4,22 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagStack.h"
-#include "InventoryItemInstance.h"
-#include "InventoryItemRecipe.h"
-#include "ItemActor_Base.h"
+#include "InventoryContainerComponent.h"
+#include "ItemInstances/InventoryItemInstance.h"
+#include "Crafting/InventoryItemRecipe.h"
+#include "ItemActors/ItemActor_Base.h"
 #include "Components/ActorComponent.h"
 #include "Components/SphereComponent.h"
 #include "Net/Serialization/FastArraySerializer.h"
 #include "InventoryManagerComponent.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryListChanged);
+
 USTRUCT(BlueprintType)
 struct FInventorySaveData
 {
 	GENERATED_BODY()
-
-public:
+	
 	UPROPERTY(SaveGame, BlueprintReadOnly)
 	int SlotsAmount;
 	UPROPERTY(SaveGame, BlueprintReadOnly)
@@ -54,6 +56,8 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	int StackCount = 0;
+
+	FContainerSlot ToStruct() const;
 };
 
 USTRUCT(BlueprintType)
@@ -61,6 +65,7 @@ struct FInventoryList : public FFastArraySerializer
 {
 	GENERATED_BODY()
 
+#pragma region CommonInterface
 	FInventoryList()
 		: OwnerComponent(nullptr)
 	{
@@ -70,8 +75,6 @@ struct FInventoryList : public FFastArraySerializer
 		: OwnerComponent(InOwnerComponent)
 	{
 	}
-
-	TArray<UInventoryItemInstance*> GetAllItems() const;
 
 private:
 	friend UInventoryManagerComponent;
@@ -90,12 +93,15 @@ public:
 	{
 		return FFastArraySerializer::FastArrayDeltaSerialize<FInventorySlot, FInventoryList>(Slots, DeltaParms, *this);
 	}
-
-	void GiveEmptySlots(int EmptySlotsAmount);
-
-	bool bIsACopyList = false;
+#pragma endregion
 	
 #pragma region CalculationFunction
+
+	/**
+	 * Used to add empty slots to inventory list.
+	 * @param EmptySlotsAmount The count that need to add slots.
+	 */
+	void AddEmptySlots(int EmptySlotsAmount);
 	
 	/**
 	 * Find first empty slot index, if not found will return -1.
@@ -106,32 +112,36 @@ public:
 	/**
 	 * Find the first stackable slot to stack the input item def, if not found, index will return -1.
 	 * @param ItemDef Def that need to find.
-	 * @param index Slot index that can stack.
-	 * @param remainAmount Amount that found slot can stack.
+	 * @param Index Slot index that can stack.
+	 * @param RemainAmount Amount that found slot can stack.
 	 */
-	void FindStack(const TSubclassOf<UInventoryItemDefinition> ItemDef, int& index, int& remainAmount);
+	void FindStack(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int& Index, int& RemainAmount);
 
 	/**
-	 * Add item to inventory.
+	 * Automatilly add item to inventory.
 	 * @param ItemDef Def that need to add.
 	 * @param Count Item amount to add.
 	 * @param TagStackOverride If item instance is class of stat tags, override stat tags of the item.
-	 * @param SlotIndex Can add in specific slot if not -1.
 	 */
-	int AddItem(TSubclassOf<UInventoryItemDefinition> ItemDef, int Count, const TArray<FGameplayTagStack> TagStackOverride, int SlotIndex = -1);
+	int AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride);
 
-	FInventorySlot AddNewInstance(TSubclassOf<UInventoryItemDefinition> ItemDef, int StackAmount = 1) const;
+	// Set item at index.
+	void SetItemAt(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride, const int& Index);
 	
-	void RemoveItem(const int index, const int amount);
+	// Create a new slot with instance.
+	FInventorySlot AddNewInstance(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int StackAmount = 1) const;
 
-	bool ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount = 1); 
+	// Remove item by amount at specific index.
+	void RemoveItemAt(const int Index, const int Amount);
+
+	bool ItemDefUsed(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Amount = 1); 
 
 	void DragDropItem(int DragIndex, int DropIndex);
 	
-	int GetTotalItemAmount(TSubclassOf<UInventoryItemDefinition> ItemDef);
+	int GetTotalItemAmount(const TSubclassOf<UInventoryItemDefinition>& ItemDef);
 	
 #pragma endregion CalculationFunction
-	
+	// Array content
 	UPROPERTY(BlueprintReadOnly)
 	TArray<FInventorySlot> Slots;
 };
@@ -157,6 +167,8 @@ protected:
 	
 	// Called when the game starts
 	virtual void BeginPlay() override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Inventory)
@@ -168,8 +180,11 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = Inventory)
 	int PickupSelectedID = -1;
 
+	UPROPERTY(BlueprintReadWrite, Category = Inventory)
+	bool bInteractValid = false;
+	
 	UPROPERTY(BlueprintReadOnly, Category = Inventory)
-	TArray<TObjectPtr<AItemActor_Base>> OverlapedActorsPtrs;
+	TArray<TObjectPtr<AItemActor_Base>> OverlappedActorsPtrs;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_SelectedQuickBarIndex, BlueprintReadOnly, Category = Inventory)
 	int SelectedQuickBarIndex = 0;
@@ -181,7 +196,7 @@ public:
 	UInventoryItemInstance* EquippedInstance;
 
 	UPROPERTY(ReplicatedUsing = OnRep_KnownRecipes, BlueprintReadWrite, EditAnywhere, Category = Crafting)
-	TArray<TSubclassOf<UInventoryItemRecipe>> KnownRecipes;
+	TArray<TSoftClassPtr<UInventoryItemRecipe>> KnownRecipes;
 	
 	UFUNCTION()
 	void OnRep_SelectedQuickBarIndex();
@@ -191,9 +206,12 @@ public:
 
 	UFUNCTION()
 	void OnRep_List();
+
+	UPROPERTY(BlueprintAssignable)
+	FOnInventoryListChanged OnInventoryListChanged;
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-	int AddItem(TArray<FGameplayTagStack> TagStackOverride, TSubclassOf<UInventoryItemDefinition> ItemDef, int Count = 1, int SlotIndex = -1);
+	int AddItem(TArray<FGameplayTagStack> TagStackOverride, TSubclassOf<UInventoryItemDefinition> ItemDef, int Count = 1);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	bool ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount = 1);
@@ -214,7 +232,7 @@ public:
 	int ItemTotalAmount(TSubclassOf<UInventoryItemDefinition> ItemDef);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
-	void DropItem(int index, int amount);
+	void DropItem(int Index, int Amount);
 
 	UFUNCTION(BlueprintCallable, Category = Inventory)
 	int FindEmpty();
@@ -224,41 +242,47 @@ public:
 	                            OutTimes = 1, int InTimes = 1);
 
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category=Inventory)
-	void SplitItem(int index, int amount);
+	void SplitItem(int Index, int Amount);
 	
-	bool DropItemCheck(const TObjectPtr<UInventoryItemInstance> instancePtr, FVector& DropLocation) const;
+	bool DropItemCheck(const TObjectPtr<UInventoryItemInstance>& InstancePtr, FVector& DropLocation) const;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
-	void RemoveItem(int index, int amount);
+	void RemoveItem(int Index, int Amount);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
-	void CreateItemActorInFront(TSubclassOf<UInventoryItemDefinition> ItemDef, int count, FGameplayTagStackContainer TagStackContainer, FVector DropLocation);
+	void CreateItemActorInFront(TSubclassOf<UInventoryItemDefinition> ItemDef, int Count, FGameplayTagStackContainer TagStackContainer, FVector DropLocation);
 	
 	UFUNCTION(BlueprintCallable, Category = Inventory)
 	void PickupSelectedIdChange(bool bUpOrDown);
 
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
 	void DragDropItem(int DragIndex, int DropIndex);
-	
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
-	void ChangeQuickBarIndex_Server(int index);
 
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
+	void DragItemToContainer(UInventoryContainerComponent* Container, int DragIndex, int DropIndex);
+	
+	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
+	void ChangeQuickBarIndex_Server(int Index);
+
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = Inventory)
 	void ForceUnequipItem();
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = Inventory)
 	bool bForceUnequipped;
 	
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = Inventory)
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = Inventory)
 	void CancelForceUnequipItem();
 
 	UFUNCTION(BlueprintImplementableEvent, DisplayName = "On Unable To Drop Item")
 	void K2_UnableToDropItem();
 
+	UFUNCTION(BlueprintImplementableEvent, DisplayName = "On Inventory List Changed")
+	void K2_InventoryListChanged();
+	
 	UFUNCTION(BlueprintCallable,BlueprintAuthorityOnly)
 	void ClearItems();
 	
-	//Translate to a object that save properties(used to save and load)
+	//Translate to an object that save properties(used to save and load)
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	FInventorySaveData GetSaveData();
 
@@ -278,10 +302,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Sphere Collision")
 	float CanPickUpItemRadius = 80;
 
-	// declare overlap begin function
-	UFUNCTION()
-	void OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-
+	UPROPERTY(EditDefaultsOnly, Category = "Sphere Collision")
+	bool bUseSphereDetection = false;
+	
 	// declare overlap end function
 	UFUNCTION()
 	void OnOverlapEnd(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);

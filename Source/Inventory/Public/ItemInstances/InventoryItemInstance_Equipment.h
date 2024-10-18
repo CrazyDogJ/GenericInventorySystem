@@ -21,6 +21,8 @@ public:
 	
 	virtual void OnEquipped();
 	virtual void OnUnequipped();
+
+	virtual void OnInstanceDestroyed() override;
 	
 protected:
 

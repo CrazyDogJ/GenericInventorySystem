@@ -34,7 +34,10 @@ void FGameplayTagStackContainer::AddStack(FGameplayTag Tag, float StackCount)
 			{
 				const float NewCount = Stack.TagFloatValue + StackCount;
 				Stack.TagFloatValue = NewCount;
-				TagToCountMap[Tag] = NewCount;
+				if (TagToCountMap.Find(Tag))
+				{
+					TagToCountMap[Tag] = NewCount;
+				}
 				MarkItemDirty(Stack);
 				return;
 			}
@@ -85,7 +88,7 @@ void FGameplayTagStackContainer::SetStackTags(const TArray<FGameplayTagStack>& T
 {
 	Stacks = TagsMap;
 	TagToCountMap.Empty();
-	for (FGameplayTagStack& Stack : Stacks)
+	for (const FGameplayTagStack& Stack : Stacks)
 	{
 		TagToCountMap.Add(Stack.Tag, Stack.TagFloatValue);
 	}
@@ -115,7 +118,10 @@ void FGameplayTagStackContainer::PostReplicatedChange(const TArrayView<int32> Ch
 	for (const int32 Index : ChangedIndices)
 	{
 		const FGameplayTagStack& Stack = Stacks[Index];
-		TagToCountMap[Stack.Tag] = Stack.TagFloatValue;
+		if (TagToCountMap.Find(Stack.Tag))
+		{
+			TagToCountMap[Stack.Tag] = Stack.TagFloatValue;
+		}
 	}
 }
 

@@ -8,6 +8,8 @@
 #include "Net/Serialization/FastArraySerializer.h"
 #include "InventoryContainerComponent.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnContainerListChanged);
+
 USTRUCT(BlueprintType)
 struct FItemProbabilitySetting
 {
@@ -33,7 +35,10 @@ struct FContainerSlot : public FFastArraySerializerItem
 {
 	GENERATED_BODY()
 
-	FContainerSlot()
+	FContainerSlot(){}
+	
+	FContainerSlot(TSubclassOf<UInventoryItemDefinition> InItemID, int InCount, const FGameplayTagStackContainer& InStackTagContainer)
+		: ItemID(InItemID), StackCount(InCount), StackTagContainer(InStackTagContainer)
 	{}
 
 public:
@@ -80,17 +85,19 @@ public:
 	UPROPERTY(BlueprintReadOnly, SaveGame)
 	TArray<FContainerSlot> Slots;
 
-	void SetItem(TSubclassOf<UInventoryItemDefinition> ItemID, int Count, FGameplayTagStackContainer Tags, int SlotIndex);
+	void SetItem(const TSubclassOf<UInventoryItemDefinition>& ItemID, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex);
 
 	void InitializeList(int EmptySlotAmount);
 
-	int FindEmpty();
+	int FindEmpty() const;
 
-	void FindStack(TSubclassOf<UInventoryItemDefinition> ItemDef, int& index, int& remainAmount);
+	void FindStack(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int& index, int& remainAmount);
 
-	int AddItem(TSubclassOf<UInventoryItemDefinition> ItemDef, int Count, FGameplayTagStackContainer Tags, int SlotIndex = -1);
+	int AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex = -1);
 
 	void RemoveItem(int Count, int SlotIndex);
+
+	void DragDropItem(int DragIndex, int DropIndex);
 };
 
 template<>
@@ -121,20 +128,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
 	int EmptySlotAmount;
 
+	UPROPERTY(BlueprintAssignable)
+	FOnContainerListChanged OnContainerListChanged;
+	
 	UFUNCTION(BlueprintCallable)
 	void SetItem(TSubclassOf<UInventoryItemDefinition> ItemID, int Count, FGameplayTagStackContainer Tags, int SlotIndex);
 
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void Initialize();
 
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	int AddItem(TSubclassOf<UInventoryItemDefinition> ItemDef, int Count, FGameplayTagStackContainer Tags, int SlotIndex = -1);
 
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void RemoveItem(int Count, int SlotIndex);
 
-	UFUNCTION(BlueprintCallable)
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void GenerateLoot();
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = Inventory)
+	void DragDropItem(int DragIndex, int DropIndex);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = Inventory)
+	void DragItemToInventory(UInventoryManagerComponent* InventoryManager, int DragIndex, int DropIndex);
+	
 	virtual void BeginPlay() override;
 };

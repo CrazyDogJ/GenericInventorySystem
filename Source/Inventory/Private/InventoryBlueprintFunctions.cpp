@@ -4,11 +4,12 @@
 #include "InventoryBlueprintFunctions.h"
 
 #include "InventoryBuffInfoBase.h"
-#include "InventoryItemInstance_StatTags.h"
+#include "InventoryItemDefinition.h"
+#include "ItemInstances/InventoryItemInstance_StatTags.h"
 
 TArray<FQualitySetting> UInventoryBlueprintFunctions::GetQualitySettings()
 {
-	if (UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+	if (auto Settings = GetInventoryProjectSettings())
 	{
 		return Settings->QualitySettings;
 	}
@@ -18,7 +19,7 @@ TArray<FQualitySetting> UInventoryBlueprintFunctions::GetQualitySettings()
 
 FLinearColor UInventoryBlueprintFunctions::GetQualityColorByGameplayTag(const FGameplayTag Tag)
 {
-	if (UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+	if (auto Settings = GetInventoryProjectSettings())
 	{
 		for (auto setting : Settings->QualitySettings)
 		{
@@ -33,7 +34,7 @@ FLinearColor UInventoryBlueprintFunctions::GetQualityColorByGameplayTag(const FG
 
 FText UInventoryBlueprintFunctions::GetQualityNameByGameplayTag(const FGameplayTag Tag)
 {
-	if (UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+	if (auto Settings = GetInventoryProjectSettings())
 	{
 		for (auto setting : Settings->QualitySettings)
 		{
@@ -53,7 +54,7 @@ bool UInventoryBlueprintFunctions::IsTextNumeric(const FText& inputText)
 
 int32 UInventoryBlueprintFunctions::GetInventoryCustomDepthStencil()
 {
-	if (UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+	if (auto Settings = GetInventoryProjectSettings())
 	{
 		return Settings->CustomDepthStencil;
 	}
@@ -65,7 +66,7 @@ void UInventoryBlueprintFunctions::BeginBuff(UInventoryItemInstance_StatTags* In
 {
 	check(Instance)
 	
-	if (UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+	if (auto Settings = GetInventoryProjectSettings())
 	{
 		for (auto Tag : Instance->GetStatTags())
 		{
@@ -73,6 +74,7 @@ void UInventoryBlueprintFunctions::BeginBuff(UInventoryItemInstance_StatTags* In
 			{
 				const TSubclassOf<UInventoryBuffInfoBase> BuffClassPtr = Settings->BuffInfos.Find(Tag.Tag)->LoadSynchronous();
 				BuffClassPtr.GetDefaultObject()->OnBuffBegin(Instance, Tag.TagFloatValue);
+				return;
 			}
 		}
 	}
@@ -82,7 +84,7 @@ void UInventoryBlueprintFunctions::EndBuff(UInventoryItemInstance_StatTags* Inst
 {
 	check(Instance)
 	
-	if (UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+	if (auto Settings = GetInventoryProjectSettings())
 	{
 		for (auto Tag : Instance->GetStatTags())
 		{
@@ -97,7 +99,7 @@ void UInventoryBlueprintFunctions::EndBuff(UInventoryItemInstance_StatTags* Inst
 
 FText UInventoryBlueprintFunctions::GetDescriptionFromBuffObject(FGameplayTagStack Tag)
 {
-	if (UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+	if (auto Settings = GetInventoryProjectSettings())
 	{
 		if (Settings->BuffInfos.Find(Tag.Tag))
 		{
@@ -106,4 +108,19 @@ FText UInventoryBlueprintFunctions::GetDescriptionFromBuffObject(FGameplayTagSta
 		}
 	}
 	return FText();
+}
+
+const UInventoryItemFragment* UInventoryBlueprintFunctions::FindItemDefinitionFragment(
+	TSubclassOf<UInventoryItemDefinition> ItemDef, TSubclassOf<UInventoryItemFragment> FragmentClass)
+{
+	if ((ItemDef != nullptr) && (FragmentClass != nullptr))
+	{
+		return GetDefault<UInventoryItemDefinition>(ItemDef)->FindFragmentByClass(FragmentClass);
+	}
+	return nullptr;
+}
+
+TObjectPtr<UInventorySettings> UInventoryBlueprintFunctions::GetInventoryProjectSettings()
+{
+	return GetMutableDefault<UInventorySettings>();
 }

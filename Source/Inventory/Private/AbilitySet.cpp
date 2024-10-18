@@ -22,14 +22,17 @@ void FAbilitySet_GrantedHandles::AddGameplayEffectHandle(const FActiveGameplayEf
     }
 }
 
-void FAbilitySet_GrantedHandles::AddAttributeSet(UAttributeSet* Set)
+void FAbilitySet_GrantedHandles::AddAttributeSet(const TObjectPtr<UAttributeSet>& Set)
 {
     GrantedAttributeSets.Add(Set);
 }
 
-void FAbilitySet_GrantedHandles::TakeFromAbilitySystem(UAbilitySystemComponent* ASC)
+void FAbilitySet_GrantedHandles::TakeFromAbilitySystem(const TObjectPtr<UAbilitySystemComponent>& ASC)
 {
-    check(ASC);
+    if (!ASC)
+    {
+        return;
+    }
 
     if (!ASC->IsOwnerActorAuthoritative())
     {
@@ -68,9 +71,13 @@ UAbilitySet::UAbilitySet(const FObjectInitializer& ObjectInitializer /*= FObject
 
 }
 
-void UAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* ASC, FAbilitySet_GrantedHandles* OutGrantedHandles, UObject* SourceObject /*= nullptr*/) const
+void UAbilitySet::GiveToAbilitySystem(const TObjectPtr<UAbilitySystemComponent>& ASC, FAbilitySet_GrantedHandles* OutGrantedHandles, const TObjectPtr<
+                                      UObject>& SourceObject /*= nullptr*/) const
 {
-    check(ASC);
+    if (!ASC)
+    {
+        return;
+    }
 
     if (!ASC->IsOwnerActorAuthoritative())
     {

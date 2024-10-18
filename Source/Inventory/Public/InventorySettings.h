@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "InventoryBuffInfoBase.h"
-#include "ItemActor_Common.h"
+#include "ItemActors/ItemActor_Base.h"
 #include "UObject/Object.h"
 #include "InventorySettings.generated.h"
 
@@ -46,7 +46,7 @@ struct FInventoryGameplayTagSetting
 		OtherGameplayTagLocDesc = FText();
 	};
 	
-	FInventoryGameplayTagSetting(const FGameplayTag Tag, const FText LocName, const FText LocDesc);
+	FInventoryGameplayTagSetting(const FGameplayTag Tag, const FText& LocName, const FText& LocDesc);
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	FGameplayTag OtherGameplayTag;
@@ -69,17 +69,20 @@ class INVENTORY_API UInventorySettings : public UObject
 public:
 	UInventorySettings(const FObjectInitializer& obj);
 
-	FQualitySetting MakeQualitySetting(FName TagName, FLinearColor Color, FText Name);
-	
+	static FQualitySetting MakeQualitySetting(FName TagName, FLinearColor Color, const FText& Name);
+	TSubclassOf<AItemActor_Base> GetDynamicItemActorClass() const;
+	/** Project items quality settings */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TArray<FQualitySetting> QualitySettings;
 
+	/** Post process material high light stencil */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory", meta=(UIMin = 0, UIMax = 255, ClampMin = 0, ClampMax = 255))
 	int32 CustomDepthStencil;
 	
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TMap<FGameplayTag, TSoftClassPtr<UInventoryBuffInfoBase>> BuffInfos;
 
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
-	TSubclassOf<AItemActor_Common> ItemActorBP_Class;
+	/** Class of dynamic item actor class */
+	UPROPERTY(EditAnywhere, config, meta = (MetaClass = "/Script/Inventory.ItemActor_Base"))
+	FSoftClassPath DynamicItemActorClass;
 };

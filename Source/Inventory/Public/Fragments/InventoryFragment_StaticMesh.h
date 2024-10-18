@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "InventoryItemDefinition.h"
+#include "BuoyancyTypes.h"
 #include "InventoryFragment_StaticMesh.generated.h"
 
 /**
@@ -26,4 +27,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	bool bEnablePhysics;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	FBuoyancyData BuoyancyData;
 };

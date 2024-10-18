@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "InventoryItemInstance.h"
+#include "ItemInstances/InventoryItemInstance.h"
 #include "GameFramework/Actor.h"
 #include "GameplayTagStack.h"
 #include "ItemActor_Base.generated.h"
@@ -25,7 +25,14 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, SaveGame, Meta = (ExposeOnSpawn = true))
 	TArray<FGameplayTagStack> OverrideTagStack;
-
+	
+	// When client get this actor's item definition, set up actor with infos in ID.
 	UFUNCTION()
 	virtual void OnRep_ItemID() {};
+	
+	UFUNCTION(BlueprintImplementableEvent)
+	void OnItemPickedUp();
+
+	// Need to implement for individual usage.
+	virtual void NativeOnItemPickedUp() {OnItemPickedUp();};
 };

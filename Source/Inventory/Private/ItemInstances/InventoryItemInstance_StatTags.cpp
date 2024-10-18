@@ -1,10 +1,8 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "InventoryItemInstance_StatTags.h"
+#include "ItemInstances/InventoryItemInstance_StatTags.h"
 
-#include "InventoryFragment_Stats.h"
-#include "InventoryItemDefinition.h"
 #include "InventorySettings.h"
 #include "Net/UnrealNetwork.h"
 

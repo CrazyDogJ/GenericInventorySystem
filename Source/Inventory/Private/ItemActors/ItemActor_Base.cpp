@@ -1,7 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "ItemActor_Base.h"
+#include "ItemActors/ItemActor_Base.h"
 
 #include "Net/UnrealNetwork.h"
 

@@ -1,4 +1,4 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "InventoryFragment_SkeletalMesh.h"
+#include "Fragments/InventoryFragment_StaticMesh.h"

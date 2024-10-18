@@ -1,7 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "InventoryItemInstance.h"
+#include "ItemInstances/InventoryItemInstance.h"
 
 #include "InventoryItemDefinition.h"
 #include "Net/UnrealNetwork.h"
@@ -17,16 +17,16 @@ UWorld* UInventoryItemInstance::GetWorld() const
 	{
 		return OwningPawn->GetWorld();
 	}
-	else
-	{
-		return nullptr;
-	}
+	return nullptr;
 }
 
 void UInventoryItemInstance::Tick(float DeltaTime)
 {
-	//native tick here
-	K2_Tick(DeltaTime);
+	if (!IsUnreachable() || !GetWorld())
+	{
+		//native tick here
+		K2_Tick(DeltaTime);
+	}
 }
 
 bool UInventoryItemInstance::IsTickable() const
@@ -36,7 +36,7 @@ bool UInventoryItemInstance::IsTickable() const
 
 TStatId UInventoryItemInstance::GetStatId() const
 {
-	return Super::GetStatID();
+	RETURN_QUICK_DECLARE_CYCLE_STAT(UInventoryItemInstance, STATGROUP_Tickables);
 }
 
 APawn* UInventoryItemInstance::GetPawn() const
@@ -61,11 +61,12 @@ const UInventoryItemFragment* UInventoryItemInstance::FindFragmentByClass(TSubcl
 	return nullptr;
 }
 
-void UInventoryItemInstance::SetItemDef(TSubclassOf<UInventoryItemDefinition> InDef)
+void UInventoryItemInstance::SetItemDef(const TSubclassOf<UInventoryItemDefinition>& InDef)
 {
 	ItemDef = InDef;
 }
 
 void UInventoryItemInstance::OnRep_Instigator()
 {
+	//TODO:Here is OnRep_Instigator
 }

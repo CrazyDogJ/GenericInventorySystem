@@ -40,9 +40,10 @@ public:
 		SetInstigator(GetOuter());
 		K2_OnInstanceCreated();
 	}
-
+	
 	virtual void OnInstanceDestroyed()
 	{
+		bUseTick = false;
 		K2_OnInstanceDestroyed();
 	}
 	
@@ -67,13 +68,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure=false, meta=(DeterminesOutputType=FragmentClass))
 	const UInventoryItemFragment* FindFragmentByClass(TSubclassOf<UInventoryItemFragment> FragmentClass) const;
 
-	template <typename ResultClass>
-	const ResultClass* FindFragmentByClass() const
-	{
-		return (ResultClass*)FindFragmentByClass(ResultClass::StaticClass());
-	}
-
-	void SetItemDef(TSubclassOf<UInventoryItemDefinition> InDef);
+	void SetItemDef(const TSubclassOf<UInventoryItemDefinition>& InDef);
 
 private:
 	UFUNCTION()
