@@ -30,6 +30,8 @@ struct FInventorySaveData
 	TArray<FGameplayTagStackContainer> StackTags;
 	UPROPERTY(SaveGame, BlueprintReadOnly)
 	TArray<int> SlotIndex;
+	UPROPERTY(SaveGame, BlueprintReadOnly)
+	int SelectedQuickBarIndex;
 
 	bool IsValid() const
 	{

@@ -877,6 +877,7 @@ FInventorySaveData UInventoryManagerComponent::GetSaveData()
 {
 	FInventorySaveData InventorySaveData;
 	InventorySaveData.SlotsAmount = InventorySlotAmount;
+	InventorySaveData.SelectedQuickBarIndex = SelectedQuickBarIndex;
 	int SlotIndex = 0;
 	for (FInventorySlot Slot : InventoryList.Slots)
 	{
@@ -917,6 +918,8 @@ bool UInventoryManagerComponent::LoadSaveData(FInventorySaveData SaveData)
 				Index++;
 			}
 		}
+		SelectedQuickBarIndex = SaveData.SelectedQuickBarIndex;
+		OnRep_SelectedQuickBarIndex();
 		return true;
 	}
 	return false;
