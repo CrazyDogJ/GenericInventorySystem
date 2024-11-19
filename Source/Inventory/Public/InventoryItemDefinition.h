@@ -10,7 +10,7 @@
 //////////////////////////////////////////////////////////////////////
 
 // Represents a fragment of an item definition
-UCLASS(DefaultToInstanced, EditInlineNew, Abstract)
+UCLASS(DefaultToInstanced, EditInlineNew, Abstract, Blueprintable)
 class INVENTORY_API UInventoryItemFragment : public UObject
 {
 	GENERATED_BODY()
