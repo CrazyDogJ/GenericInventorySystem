@@ -2,6 +2,8 @@
 
 
 #include "AbilitySet.h"
+
+#include "GameplayTagsManager.h"
 #include "Logging/LogCategory.h"
 #include "Logging/LogMacros.h"
 #include "Containers/UnrealString.h"
@@ -148,4 +150,9 @@ void UAbilitySet::GiveToAbilitySystem(const TObjectPtr<UAbilitySystemComponent>&
             OutGrantedHandles->AddAttributeSet(NewSet);
         }
     }
+}
+
+void UAbilitySet::K2_GiveToAbilitySystem(UAbilitySystemComponent* ASC, FAbilitySet_GrantedHandles& OutGrantedHandles, UObject* SourceObject)
+{
+    GiveToAbilitySystem(ASC, &OutGrantedHandles, SourceObject);
 }

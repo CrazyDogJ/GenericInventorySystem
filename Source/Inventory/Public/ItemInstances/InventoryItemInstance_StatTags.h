@@ -42,6 +42,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category=Inventory)
 	FGameplayTagStackContainer GetStatTagsContainer() {return  StatTags;};
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = Instance)
+	TMap<FGameplayTag, float> DefaultStatTags;
 	
 private:
 	UPROPERTY(Replicated)

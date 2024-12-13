@@ -101,6 +101,8 @@ public:
 	void GiveToAbilitySystem(const TObjectPtr<UAbilitySystemComponent>& ASC, FAbilitySet_GrantedHandles* OutGrantedHandles, const TObjectPtr<
 	                         UObject>& SourceObject = nullptr) const;
 
+	UFUNCTION(BlueprintCallable)
+	void K2_GiveToAbilitySystem(UAbilitySystemComponent* ASC, FAbilitySet_GrantedHandles& OutGrantedHandles, UObject* SourceObject = nullptr);
 protected:
 
 	// Gameplay abilities to grant when this ability set is granted.

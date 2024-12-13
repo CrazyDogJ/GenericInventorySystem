@@ -12,8 +12,8 @@ class UInventoryItemRecipeCondition;
 /**
  * 
  */
-UCLASS(Blueprintable, Const, Abstract)
-class INVENTORY_API UInventoryItemRecipe : public UObject
+UCLASS(Blueprintable, Const)
+class INVENTORY_API UInventoryItemRecipe : public UDataAsset
 {
 	GENERATED_BODY()
 
@@ -27,10 +27,10 @@ public:
 	FText DisplayDescText;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
-	TMap<TSubclassOf<UInventoryItemDefinition>, int> NeedItems;
+	TMap<UInventoryItemDefinition*, int> NeedItems;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
-	TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems;
+	TMap<UInventoryItemDefinition*, int> OutItems;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category= "Inventory" , Instanced)
 	TArray<TObjectPtr<UInventoryItemRecipeCondition>> Conditions;
@@ -43,5 +43,5 @@ class UCraftingFunctionLibrary : public UBlueprintFunctionLibrary
 
 public:
 	UFUNCTION(BlueprintCallable)
-	static TArray<UInventoryItemRecipeCondition*> GetConditions(TSubclassOf<UInventoryItemRecipe> Recipe);
+	static TArray<UInventoryItemRecipeCondition*> GetConditions(UInventoryItemRecipe* Recipe);
 };

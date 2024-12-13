@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "InventoryManagerComponent.h"
 #include "InventorySettings.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "InventoryBlueprintFunctions.generated.h"
@@ -53,8 +54,18 @@ public:
 	 * @return FragmentObject
 	 */
 	UFUNCTION(BlueprintCallable, meta=(DeterminesOutputType=FragmentClass))
-	static const UInventoryItemFragment* FindItemDefinitionFragment(TSubclassOf<UInventoryItemDefinition> ItemDef, TSubclassOf<UInventoryItemFragment> FragmentClass);
+	static const UInventoryItemFragment* FindItemDefinitionFragment(UInventoryItemDefinition* ItemDef, TSubclassOf<UInventoryItemFragment> FragmentClass);
 
+	// Local press ga input
+	UFUNCTION(BlueprintCallable)
+	static void PressInputByTag(UAbilitySystemComponent* ASC, const FGameplayTag& InTag);
+
+	// Local release ga input
+	UFUNCTION(BlueprintCallable)
+	static void ReleaseInputByTag(UAbilitySystemComponent* ASC, const FGameplayTag& InTag);
+
+	UFUNCTION(BlueprintPure)
+	static UInventoryItemDefinition* GetItemDefinition(const FInventorySlot& InSlot);
 private:
 	static TObjectPtr<UInventorySettings> GetInventoryProjectSettings();
 };

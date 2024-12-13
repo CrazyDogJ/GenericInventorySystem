@@ -3,31 +3,24 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "InventoryItemDefinition.h"
-#include "BuoyancyTypes.h"
+#include "InventoryFragment_Mesh.h"
 #include "InventoryFragment_StaticMesh.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class INVENTORY_API UInventoryFragment_StaticMesh : public UInventoryItemFragment
+class INVENTORY_API UInventoryFragment_StaticMesh : public UInventoryFragment_Mesh
 {
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mesh")
 	UStaticMesh* PickupStaticMesh;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mesh")
 	UStaticMesh* PickupStaticMesh_Multiple;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
-	bool bEnableCollisionWithPlayer;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory")
-	bool bEnablePhysics;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory", meta=(Units = "kg"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mesh", meta=(Units = "kg"))
 	float Mass;
 };

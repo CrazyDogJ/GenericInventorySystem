@@ -3,6 +3,8 @@
 
 #include "InventoryBlueprintFunctions.h"
 
+#include "AbilitySystemComponent.h"
+#include "GameplayAbilitySpec.h"
 #include "InventoryBuffInfoBase.h"
 #include "InventoryItemDefinition.h"
 #include "ItemInstances/InventoryItemInstance_StatTags.h"
@@ -111,13 +113,83 @@ FText UInventoryBlueprintFunctions::GetDescriptionFromBuffObject(FGameplayTagSta
 }
 
 const UInventoryItemFragment* UInventoryBlueprintFunctions::FindItemDefinitionFragment(
-	TSubclassOf<UInventoryItemDefinition> ItemDef, TSubclassOf<UInventoryItemFragment> FragmentClass)
+	UInventoryItemDefinition* ItemDef, TSubclassOf<UInventoryItemFragment> FragmentClass)
 {
 	if ((ItemDef != nullptr) && (FragmentClass != nullptr))
 	{
-		return GetDefault<UInventoryItemDefinition>(ItemDef)->FindFragmentByClass(FragmentClass);
+		return ItemDef->FindFragmentByClass(FragmentClass);
 	}
 	return nullptr;
+}
+
+void UInventoryBlueprintFunctions::PressInputByTag(UAbilitySystemComponent* ASC, const FGameplayTag& InTag)
+{
+	if (!ASC)
+	{
+		return;
+	}
+	
+	FScopedAbilityListLock ActiveScopeLock(*ASC);
+	for (FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.DynamicAbilityTags.HasTag(InTag))
+		{
+			if (Spec.Ability)
+			{
+				Spec.InputPressed = true;
+				if (Spec.IsActive())
+				{
+					if (Spec.Ability->bReplicateInputDirectly && ASC->IsOwnerActorAuthoritative() == false)
+					{
+						ASC->ServerSetInputPressed(Spec.Handle);
+					}
+
+					ASC->AbilitySpecInputPressed(Spec);
+
+					// Invoke the InputPressed event. This is not replicated here. If someone is listening, they may replicate the InputPressed event to the server.
+					ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec.Handle, Spec.ActivationInfo.GetActivationPredictionKey());					
+				}
+				else
+				{
+					// Ability is not active, so try to activate it
+					ASC->TryActivateAbility(Spec.Handle);
+				}
+			}
+		}
+	}
+}
+
+void UInventoryBlueprintFunctions::ReleaseInputByTag(UAbilitySystemComponent* ASC, const FGameplayTag& InTag)
+{
+	if (!ASC)
+	{
+		return;
+	}
+	
+	FScopedAbilityListLock ActiveScopeLock(*ASC);
+	for (FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.DynamicAbilityTags.HasTag(InTag))
+		{
+			Spec.InputPressed = false;
+			if (Spec.Ability && Spec.IsActive())
+			{
+				if (Spec.Ability->bReplicateInputDirectly && ASC->IsOwnerActorAuthoritative() == false)
+				{
+					ASC->ServerSetInputReleased(Spec.Handle);
+				}
+
+				ASC->AbilitySpecInputReleased(Spec);
+				
+				ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputReleased, Spec.Handle, Spec.ActivationInfo.GetActivationPredictionKey());
+			}
+		}
+	}
+}
+
+UInventoryItemDefinition* UInventoryBlueprintFunctions::GetItemDefinition(const FInventorySlot& InSlot)
+{
+	return InSlot.GetItemDef();
 }
 
 TObjectPtr<UInventorySettings> UInventoryBlueprintFunctions::GetInventoryProjectSettings()

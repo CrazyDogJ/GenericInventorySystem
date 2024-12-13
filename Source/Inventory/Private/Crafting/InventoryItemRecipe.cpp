@@ -9,11 +9,11 @@ UInventoryItemRecipe::UInventoryItemRecipe(const FObjectInitializer& ObjectIniti
 }
 
 TArray<UInventoryItemRecipeCondition*> UCraftingFunctionLibrary::GetConditions(
-	TSubclassOf<UInventoryItemRecipe> Recipe)
+	UInventoryItemRecipe* Recipe)
 {
 	if (Recipe)
 	{
-		const auto result = Recipe.GetDefaultObject()->Conditions;
+		const auto result = Recipe->Conditions;
 		return result;
 	}
 	TArray<UInventoryItemRecipeCondition*> empty;

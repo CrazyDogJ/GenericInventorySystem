@@ -11,9 +11,33 @@
 #include "Components/ActorComponent.h"
 #include "Components/SphereComponent.h"
 #include "Net/Serialization/FastArraySerializer.h"
+#include "Serialization/ObjectAndNameAsStringProxyArchive.h"
 #include "InventoryManagerComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryListChanged);
+
+struct FItemInstanceArchive : public FObjectAndNameAsStringProxyArchive
+{
+	FItemInstanceArchive(FArchive& InInnerArchive) : FObjectAndNameAsStringProxyArchive(InInnerArchive, true)
+	{
+		ArIsSaveGame = true;
+	}
+};
+
+USTRUCT(BlueprintType)
+struct FItemSlotSaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, SaveGame)
+	TArray<uint8> Data;
+
+	UPROPERTY(BlueprintReadOnly, SaveGame, VisibleAnywhere)
+	TObjectPtr<UInventoryItemDefinition> ItemDefinition;
+
+	UPROPERTY(BlueprintReadOnly, SaveGame, VisibleAnywhere)
+	int StackCount;
+};
 
 USTRUCT(BlueprintType)
 struct FInventorySaveData
@@ -22,20 +46,19 @@ struct FInventorySaveData
 	
 	UPROPERTY(SaveGame, BlueprintReadOnly)
 	int SlotsAmount;
-	UPROPERTY(SaveGame, BlueprintReadOnly)
-	TArray<TSubclassOf<UInventoryItemDefinition>> ItemID;
-	UPROPERTY(SaveGame, BlueprintReadOnly)
-	TArray<int> StackCount;
-	UPROPERTY(SaveGame, BlueprintReadOnly)
-	TArray<FGameplayTagStackContainer> StackTags;
-	UPROPERTY(SaveGame, BlueprintReadOnly)
-	TArray<int> SlotIndex;
+
 	UPROPERTY(SaveGame, BlueprintReadOnly)
 	int SelectedQuickBarIndex;
 
+	UPROPERTY(SaveGame, BlueprintReadOnly)
+	TMap<int, FItemSlotSaveData> SlotDataMap;
+
+	UPROPERTY(SaveGame, BlueprintReadOnly)
+	bool bIsValid = false;
+	
 	bool IsValid() const
 	{
-		return SlotIndex.Num() > 0;
+		return bIsValid;
 	}
 };
 
@@ -57,9 +80,14 @@ public:
 	TObjectPtr<UInventoryItemInstance> Instance = nullptr;
 
 	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UInventoryItemDefinition> ItemDefinition = nullptr;
+	
+	UPROPERTY(BlueprintReadOnly)
 	int StackCount = 0;
 
 	FContainerSlot ToStruct() const;
+
+	TObjectPtr<UInventoryItemDefinition> GetItemDef() const;
 };
 
 USTRUCT(BlueprintType)
@@ -117,7 +145,7 @@ public:
 	 * @param Index Slot index that can stack.
 	 * @param RemainAmount Amount that found slot can stack.
 	 */
-	void FindStack(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int& Index, int& RemainAmount);
+	void FindStack(const UInventoryItemDefinition* ItemDef, int& Index, int& RemainAmount);
 
 	/**
 	 * Automatilly add item to inventory.
@@ -125,22 +153,22 @@ public:
 	 * @param Count Item amount to add.
 	 * @param TagStackOverride If item instance is class of stat tags, override stat tags of the item.
 	 */
-	int AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride);
+	int AddItem(UInventoryItemDefinition* ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride);
 
 	// Set item at index.
-	void SetItemAt(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride, const int& Index);
+	void SetItemAt(UInventoryItemDefinition* ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride, const int& Index);
 	
 	// Create a new slot with instance.
-	FInventorySlot AddNewInstance(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int StackAmount = 1) const;
+	FInventorySlot AddNewInstance(UInventoryItemDefinition* ItemDef, int StackAmount = 1) const;
 
 	// Remove item by amount at specific index.
 	void RemoveItemAt(const int Index, const int Amount);
 
-	bool ItemDefUsed(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Amount = 1); 
+	bool ItemDefUsed(const UInventoryItemDefinition* ItemDef, int Amount = 1); 
 
 	void DragDropItem(int DragIndex, int DropIndex);
 	
-	int GetTotalItemAmount(const TSubclassOf<UInventoryItemDefinition>& ItemDef);
+	int GetTotalItemAmount(const UInventoryItemDefinition* ItemDef);
 	
 #pragma endregion CalculationFunction
 	// Array content
@@ -198,7 +226,7 @@ public:
 	UInventoryItemInstance* EquippedInstance;
 
 	UPROPERTY(ReplicatedUsing = OnRep_KnownRecipes, BlueprintReadWrite, EditAnywhere, Category = Crafting)
-	TArray<TSoftClassPtr<UInventoryItemRecipe>> KnownRecipes;
+	TArray<TSoftObjectPtr<UInventoryItemRecipe>> KnownRecipes;
 	
 	UFUNCTION()
 	void OnRep_SelectedQuickBarIndex();
@@ -213,25 +241,25 @@ public:
 	FOnInventoryListChanged OnInventoryListChanged;
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-	int AddItem(TArray<FGameplayTagStack> TagStackOverride, TSubclassOf<UInventoryItemDefinition> ItemDef, int Count = 1);
+	int AddItem(TArray<FGameplayTagStack> TagStackOverride, UInventoryItemDefinition* ItemDef, int Count = 1);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-	bool ItemDefUsed(TSubclassOf<UInventoryItemDefinition> ItemDef, int Amount = 1);
+	bool ItemDefUsed(const UInventoryItemDefinition* ItemDef, int Amount = 1);
 
 	UFUNCTION(BlueprintCallable, Category = Crafting)
-	int RecipeCraftTimes(TSubclassOf<UInventoryItemRecipe> Recipe);
+	int RecipeCraftTimes(UInventoryItemRecipe* Recipe);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
 	void PickUpItem(AItemActor_Base* ItemActor);
 
 	UFUNCTION(BlueprintCallable, Category = Crafting)
-	bool CheckRecipeNeedItems(TSubclassOf<UInventoryItemRecipe> Recipe);
+	bool CheckRecipeNeedItems(const UInventoryItemRecipe* Recipe);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Crafting)
-	void CraftItem(TSubclassOf<UInventoryItemRecipe> Recipe, int Times = 1);
+	void CraftItem(const UInventoryItemRecipe* Recipe, int Times = 1);
 
 	UFUNCTION(BlueprintCallable, Category = Inventory)
-	int ItemTotalAmount(TSubclassOf<UInventoryItemDefinition> ItemDef);
+	int ItemTotalAmount(const UInventoryItemDefinition* ItemDef);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
 	void DropItem(int Index, int Amount);
@@ -240,19 +268,19 @@ public:
 	int FindEmpty();
 
 	UFUNCTION(BlueprintCallable, Category = Inventory)
-	bool CheckInventoryExchange(TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems, TMap<TSubclassOf<UInventoryItemDefinition>, int> InItems, int
+	bool CheckInventoryExchange(TMap<UInventoryItemDefinition*, int> OutItems, TMap<UInventoryItemDefinition*, int> InItems, int
 	                            OutTimes = 1, int InTimes = 1);
 
 	UFUNCTION(BlueprintCallable, Server, Reliable, Category=Inventory)
 	void SplitItem(int Index, int Amount);
 	
-	bool DropItemCheck(const TObjectPtr<UInventoryItemInstance>& InstancePtr, FVector& DropLocation) const;
+	bool DropItemCheck(const UInventoryItemDefinition* ItemDef, FVector& DropLocation) const;
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
 	void RemoveItem(int Index, int Amount);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
-	void CreateItemActorInFront(TSubclassOf<UInventoryItemDefinition> ItemDef, int Count, FGameplayTagStackContainer TagStackContainer, FVector DropLocation);
+	void CreateItemActorInFront(const UInventoryItemDefinition* ItemDef, int Count, FGameplayTagStackContainer TagStackContainer, FVector DropLocation);
 	
 	UFUNCTION(BlueprintCallable, Category = Inventory)
 	void PickupSelectedIdChange(bool bUpOrDown);

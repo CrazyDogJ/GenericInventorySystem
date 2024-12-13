@@ -10,7 +10,7 @@ class UInventoryItemDefinition;
 /**
  * Inventory Item Instance that can be blueprintable in order to make custom events.
  */
-UCLASS(BlueprintType, Blueprintable)
+UCLASS(Blueprintable, EditInlineNew)
 class INVENTORY_API UInventoryItemInstance : public UObject, public FTickableGameObject
 {
 	GENERATED_BODY()
@@ -28,7 +28,7 @@ public:
 
 	UFUNCTION(BlueprintPure)
 	UObject* GetInstigator() const { return Instigator; }
-
+	
 	void SetInstigator(UObject* InInstigator) { Instigator = InInstigator; }
 	
 	UFUNCTION(BlueprintPure)
@@ -53,14 +53,22 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Instance Destroyed")
 	void K2_OnInstanceDestroyed();
 
+	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Pre Save Game")
+	void K2_OnPreSaveGame();
+
+	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Pose Load Game")
+	void K2_OnPostLoadGame();
+	
 	UFUNCTION(BlueprintImplementableEvent, DisplayName="Tick")
 	void K2_Tick(float deltaTime);
-	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+#pragma region Public Properties
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Instance)
 	bool bUseTick = false;
+#pragma endregion 
 	
 	UFUNCTION(BlueprintPure)
-	TSubclassOf<UInventoryItemDefinition> GetItemDef() const
+	UInventoryItemDefinition* GetItemDef() const
 	{
 		return ItemDef;
 	}
@@ -68,7 +76,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure=false, meta=(DeterminesOutputType=FragmentClass))
 	const UInventoryItemFragment* FindFragmentByClass(TSubclassOf<UInventoryItemFragment> FragmentClass) const;
 
-	void SetItemDef(const TSubclassOf<UInventoryItemDefinition>& InDef);
+	void SetItemDef(UInventoryItemDefinition* InDef);
 
 private:
 	UFUNCTION()
@@ -76,7 +84,7 @@ private:
 	
 	// The item definition
 	UPROPERTY(Replicated)
-	TSubclassOf<UInventoryItemDefinition> ItemDef;
+	TObjectPtr<UInventoryItemDefinition> ItemDef;
 	
 	UPROPERTY(ReplicatedUsing=OnRep_Instigator)
 	TObjectPtr<UObject> Instigator;

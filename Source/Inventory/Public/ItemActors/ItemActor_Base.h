@@ -18,7 +18,7 @@ public:
 	AItemActor_Base(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	UPROPERTY(ReplicatedUsing = OnRep_ItemID, EditAnywhere, BlueprintReadWrite, Category = "Inventory", SaveGame, Meta = (ExposeOnSpawn = true))
-	TSubclassOf<UInventoryItemDefinition> ItemID;
+	UInventoryItemDefinition* ItemID;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Inventory", meta = (ClampMin = "1"), SaveGame, Meta = (ExposeOnSpawn = true))
 	int Amount = 1;

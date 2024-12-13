@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "InventoryBuffInfoBase.h"
-#include "ItemActors/ItemActor_Base.h"
+#include "ItemActors/ItemActor_Common.h"
 #include "UObject/Object.h"
 #include "InventorySettings.generated.h"
 
@@ -70,7 +70,7 @@ public:
 	UInventorySettings(const FObjectInitializer& obj);
 
 	static FQualitySetting MakeQualitySetting(FName TagName, FLinearColor Color, const FText& Name);
-	TSubclassOf<AItemActor_Base> GetDynamicItemActorClass() const;
+	TSubclassOf<AItemActor_Common> GetDynamicItemActorClass() const;
 	/** Project items quality settings */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TArray<FQualitySetting> QualitySettings;
@@ -83,6 +83,6 @@ public:
 	TMap<FGameplayTag, TSoftClassPtr<UInventoryBuffInfoBase>> BuffInfos;
 
 	/** Class of dynamic item actor class */
-	UPROPERTY(EditAnywhere, config, meta = (MetaClass = "/Script/Inventory.ItemActor_Base"))
+	UPROPERTY(EditAnywhere, config, meta = (MetaClass = "/Script/Inventory.ItemActor_Common"))
 	FSoftClassPath DynamicItemActorClass;
 };

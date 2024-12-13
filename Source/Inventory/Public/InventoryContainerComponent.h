@@ -18,7 +18,7 @@ struct FItemProbabilitySetting
 public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TSubclassOf<UInventoryItemDefinition> ItemID;
+	TObjectPtr<UInventoryItemDefinition> ItemID;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0", ClampMax = "1", UIMin = "0", UIMax = "1"))
 	float ItemProbability;
@@ -37,13 +37,13 @@ struct FContainerSlot : public FFastArraySerializerItem
 
 	FContainerSlot(){}
 	
-	FContainerSlot(TSubclassOf<UInventoryItemDefinition> InItemID, int InCount, const FGameplayTagStackContainer& InStackTagContainer)
+	FContainerSlot(TObjectPtr<UInventoryItemDefinition> InItemID, int InCount, const FGameplayTagStackContainer& InStackTagContainer)
 		: ItemID(InItemID), StackCount(InCount), StackTagContainer(InStackTagContainer)
 	{}
 
 public:
 	UPROPERTY(BlueprintReadOnly, SaveGame)
-	TSubclassOf<UInventoryItemDefinition> ItemID;
+	TObjectPtr<UInventoryItemDefinition> ItemID;
 
 	UPROPERTY(BlueprintReadOnly, SaveGame)
 	int StackCount = 0;
@@ -85,15 +85,15 @@ public:
 	UPROPERTY(BlueprintReadOnly, SaveGame)
 	TArray<FContainerSlot> Slots;
 
-	void SetItem(const TSubclassOf<UInventoryItemDefinition>& ItemID, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex);
+	void SetItem(const TObjectPtr<UInventoryItemDefinition> ItemID, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex);
 
 	void InitializeList(int EmptySlotAmount);
 
 	int FindEmpty() const;
 
-	void FindStack(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int& index, int& remainAmount);
+	void FindStack(const TObjectPtr<UInventoryItemDefinition> ItemDef, int& index, int& remainAmount);
 
-	int AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex = -1);
+	int AddItem(const TObjectPtr<UInventoryItemDefinition> ItemDef, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex = -1);
 
 	void RemoveItem(int Count, int SlotIndex);
 
@@ -132,13 +132,13 @@ public:
 	FOnContainerListChanged OnContainerListChanged;
 	
 	UFUNCTION(BlueprintCallable)
-	void SetItem(TSubclassOf<UInventoryItemDefinition> ItemID, int Count, FGameplayTagStackContainer Tags, int SlotIndex);
+	void SetItem(UInventoryItemDefinition* ItemID, int Count, FGameplayTagStackContainer Tags, int SlotIndex);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void Initialize();
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-	int AddItem(TSubclassOf<UInventoryItemDefinition> ItemDef, int Count, FGameplayTagStackContainer Tags, int SlotIndex = -1);
+	int AddItem(UInventoryItemDefinition* ItemDef, int Count, FGameplayTagStackContainer Tags, int SlotIndex = -1);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void RemoveItem(int Count, int SlotIndex);

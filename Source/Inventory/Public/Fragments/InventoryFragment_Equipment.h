@@ -24,6 +24,6 @@ public:
 	TSubclassOf<AActor> WeaponActorToSpawn;
 
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = Equipment)
-	TSubclassOf<UInventoryItemDefinition> AmmoItemUsage;
+	TObjectPtr<UInventoryItemDefinition> AmmoItemUsage;
 	
 };

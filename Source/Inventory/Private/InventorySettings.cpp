@@ -4,6 +4,7 @@
 #include "InventorySettings.h"
 
 #include "GameplayTagsManager.h"
+#include "ItemActors/ItemActor_Common.h"
 
 FQualitySetting::FQualitySetting(const FGameplayTag Tag, const FLinearColor Color, const FText& Name)
 {
@@ -40,7 +41,7 @@ FQualitySetting UInventorySettings::MakeQualitySetting(FName TagName, FLinearCol
 	return FQualitySetting(Tag, Color, Name);
 }
 
-TSubclassOf<AItemActor_Base> UInventorySettings::GetDynamicItemActorClass() const
+TSubclassOf<AItemActor_Common> UInventorySettings::GetDynamicItemActorClass() const
 {
 	return DynamicItemActorClass.TryLoadClass<AItemActor_Base>();
 }

@@ -17,7 +17,7 @@ UInventoryContainerComponent::UInventoryContainerComponent(const FObjectInitiali
 	SetIsReplicatedByDefault(true);
 }
 
-void UInventoryContainerComponent::SetItem(TSubclassOf<UInventoryItemDefinition> ItemID, int Count, FGameplayTagStackContainer Tags, int SlotIndex)
+void UInventoryContainerComponent::SetItem(UInventoryItemDefinition* ItemID, int Count, FGameplayTagStackContainer Tags, int SlotIndex)
 {
 	List.SetItem(ItemID, Count, Tags, SlotIndex);
 }
@@ -30,7 +30,7 @@ void UInventoryContainerComponent::Initialize()
 	List.InitializeList(EmptySlotAmount);
 }
 
-int UInventoryContainerComponent::AddItem(TSubclassOf<UInventoryItemDefinition> ItemDef, int Count, FGameplayTagStackContainer Tags, int SlotIndex /*= -1*/)
+int UInventoryContainerComponent::AddItem(UInventoryItemDefinition* ItemDef, int Count, FGameplayTagStackContainer Tags, int SlotIndex /*= -1*/)
 {
     return List.AddItem(ItemDef, Count, Tags, SlotIndex);
 }
@@ -82,11 +82,11 @@ void UInventoryContainerComponent::DragItemToInventory(UInventoryManagerComponen
     }
 	
     if (List.Slots[DragIndex].ItemID != nullptr
-        && InventoryManager->InventoryList.Slots[DropIndex].Instance != nullptr
-        && List.Slots[DragIndex].ItemID == InventoryManager->InventoryList.Slots[DropIndex].Instance->GetItemDef())
+        && InventoryManager->InventoryList.Slots[DropIndex].GetItemDef() != nullptr
+        && List.Slots[DragIndex].ItemID == InventoryManager->InventoryList.Slots[DropIndex].GetItemDef())
     {
         //Stack
-        const int maxStackAmount = List.Slots[DragIndex].ItemID.GetDefaultObject()->MaxStackAmount;
+        const int maxStackAmount = List.Slots[DragIndex].ItemID->MaxStackAmount;
         const int finalAmount = InventoryManager->InventoryList.Slots[DropIndex].StackCount + List.Slots[DragIndex].StackCount;
         const int calculateAmount = finalAmount - maxStackAmount;
         if (InventoryManager->InventoryList.Slots[DropIndex].StackCount != maxStackAmount)
@@ -114,16 +114,11 @@ void UInventoryContainerComponent::DragItemToInventory(UInventoryManagerComponen
     auto Instance = Cast<UInventoryItemInstance_StatTags>(InventoryManager->InventoryList.Slots[DropIndex].Instance);
     FContainerSlot Slot = List.Slots[DragIndex];
     FGameplayTagStackContainer TagStacks;
-    TSubclassOf<UInventoryItemDefinition> DragItemDef = nullptr;
-    if (InventoryManager->InventoryList.Slots[DropIndex].Instance)
-    {
-        DragItemDef = InventoryManager->InventoryList.Slots[DragIndex].Instance->GetItemDef();
-    }
     if (Instance)
     {
         TagStacks = Instance->GetStatTagsContainer();
     }
-    SetItem(DragItemDef, StackCount, TagStacks, DragIndex);
+    SetItem(InventoryManager->InventoryList.Slots[DragIndex].GetItemDef(), StackCount, TagStacks, DragIndex);
     InventoryManager->RemoveItem(DropIndex, StackCount);
     InventoryManager->InventoryList.SetItemAt(Slot.ItemID, Slot.StackCount, Slot.StackTagContainer.GetTagStacks(), DropIndex);
 }
@@ -169,7 +164,7 @@ void FContainerList::PostReplicatedChange(const TArrayView<int32> ChangedIndices
     Cast<UInventoryContainerComponent>(OwnerComponent)->OnContainerListChanged.Broadcast();
 }
 
-void FContainerList::SetItem(const TSubclassOf<UInventoryItemDefinition>& ItemID, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex)
+void FContainerList::SetItem(const TObjectPtr<UInventoryItemDefinition> ItemID, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex)
 {
 	FContainerSlot Slot;
 	Slot.ItemID = ItemID;
@@ -194,7 +189,7 @@ int FContainerList::FindEmpty() const
     return index;
 }
 
-void FContainerList::FindStack(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int& index, int& remainAmount)
+void FContainerList::FindStack(const TObjectPtr<UInventoryItemDefinition> ItemDef, int& index, int& remainAmount)
 {
     index = -1;
     remainAmount = -1;
@@ -206,7 +201,7 @@ void FContainerList::FindStack(const TSubclassOf<UInventoryItemDefinition>& Item
 
     index = Slots.IndexOfByPredicate([&ItemDef](const FContainerSlot& InItem)
     {
-        return InItem.ItemID == ItemDef && InItem.StackCount < ItemDef.GetDefaultObject()->MaxStackAmount;
+        return InItem.ItemID == ItemDef && InItem.StackCount < ItemDef->MaxStackAmount;
     });
 
     if (index < 0)
@@ -214,10 +209,10 @@ void FContainerList::FindStack(const TSubclassOf<UInventoryItemDefinition>& Item
         return;
     }
     
-    remainAmount = ItemDef.GetDefaultObject()->MaxStackAmount - Slots[index].StackCount;
+    remainAmount = ItemDef->MaxStackAmount - Slots[index].StackCount;
 }
 
-int FContainerList::AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex /*= -1*/)
+int FContainerList::AddItem(const TObjectPtr<UInventoryItemDefinition> ItemDef, int Count, const FGameplayTagStackContainer& Tags, int SlotIndex /*= -1*/)
 {
     if (ItemDef == nullptr || Count <= 0)
     {
@@ -257,8 +252,8 @@ int FContainerList::AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef
     {
         FContainerSlot Slot;
         Slot.ItemID = ItemDef;
-        Slot.StackCount = (Count >= ItemDef.GetDefaultObject()->MaxStackAmount) ? ItemDef.GetDefaultObject()->MaxStackAmount : Count;
-        Count -= (Count >= ItemDef.GetDefaultObject()->MaxStackAmount) ? ItemDef.GetDefaultObject()->MaxStackAmount : Count;
+        Slot.StackCount = (Count >= ItemDef->MaxStackAmount) ? ItemDef->MaxStackAmount : Count;
+        Count -= (Count >= ItemDef->MaxStackAmount) ? ItemDef->MaxStackAmount : Count;
 
         //如果有TagStack就设置，没有就原Def
         if (Tags.GetTagStacks().Num() > 0)
@@ -305,7 +300,7 @@ void FContainerList::DragDropItem(int DragIndex, int DropIndex)
         && Slots[DragIndex].ItemID == Slots[DropIndex].ItemID)
     {
         //Stack
-        const int maxStackAmount = Slots[DragIndex].ItemID.GetDefaultObject()->MaxStackAmount;
+        const int maxStackAmount = Slots[DragIndex].ItemID->MaxStackAmount;
         const int finalAmount = Slots[DropIndex].StackCount + Slots[DragIndex].StackCount;
         const int calculateAmount = finalAmount - maxStackAmount;
         if (Slots[DropIndex].StackCount != maxStackAmount)

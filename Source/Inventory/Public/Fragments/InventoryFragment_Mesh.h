@@ -3,21 +3,21 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "InventoryFragment_Mesh.h"
-#include "InventoryFragment_SkeletalMesh.generated.h"
+#include "InventoryItemDefinition.h"
+#include "InventoryFragment_Mesh.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class INVENTORY_API UInventoryFragment_SkeletalMesh : public UInventoryFragment_Mesh
+class INVENTORY_API UInventoryFragment_Mesh : public UInventoryItemFragment
 {
 	GENERATED_BODY()
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mesh")
-	USkeletalMesh* PickupSkeletalMesh;
-	
+	bool bEnableCollisionWithPlayer;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Mesh")
-	USkeletalMesh* PickupSkeletalMesh_Multiple;
+	bool bEnablePhysics;
 };

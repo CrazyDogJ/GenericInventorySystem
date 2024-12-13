@@ -12,23 +12,20 @@
 #include "InventorySettings.h"
 #include "Components/SphereComponent.h"
 #include "Engine/ActorChannel.h"
+#include "ItemActors/ItemActor_Common.h"
 #include "Net/UnrealNetwork.h"
 
 
 FString FInventorySlot::GetDebugString() const
 {
-	TSubclassOf<UInventoryItemDefinition> ItemDef;
-	if (Instance != nullptr)
-	{
-		ItemDef = Instance->GetItemDef();
-	}
+	TObjectPtr<UInventoryItemDefinition> ItemDef = GetItemDef();
 
 	return FString::Printf(TEXT("%s (%d x %s)"), *GetNameSafe(Instance), StackCount, *GetNameSafe(ItemDef));
 }
 
 FContainerSlot FInventorySlot::ToStruct() const
 {
-	if (!Instance)
+	if (!GetItemDef())
 	{
 		return FContainerSlot();
 	}
@@ -38,7 +35,16 @@ FContainerSlot FInventorySlot::ToStruct() const
 	{
 		Container = StatInstance->GetStatTagsContainer();
 	}
-	return FContainerSlot(Instance->GetItemDef(), StackCount, Container);
+	return FContainerSlot(GetItemDef(), StackCount, Container);
+}
+
+TObjectPtr<UInventoryItemDefinition> FInventorySlot::GetItemDef() const
+{
+	if (Instance)
+	{
+		return Instance->GetItemDef();
+	}
+	return ItemDefinition;
 }
 
 void FInventoryList::PreReplicatedRemove(const TArrayView<int32> RemovedIndices, int32 FinalSize)
@@ -79,12 +85,12 @@ int FInventoryList::FindEmpty() const
 {
 	const int index = Slots.IndexOfByPredicate([](const FInventorySlot& InItem)
 	{
-		return InItem.Instance == nullptr;
+		return InItem.GetItemDef() == nullptr;
 	});
 	return index;
 }
 
-void FInventoryList::FindStack(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int& Index, int& RemainAmount)
+void FInventoryList::FindStack(const UInventoryItemDefinition* ItemDef, int& Index, int& RemainAmount)
 {
 	Index = -1;
 	RemainAmount = -1;
@@ -96,11 +102,11 @@ void FInventoryList::FindStack(const TSubclassOf<UInventoryItemDefinition>& Item
 
 	Index = Slots.IndexOfByPredicate([&ItemDef](const FInventorySlot& InItem)
 	{
-		if (InItem.Instance == nullptr)
+		if (InItem.GetItemDef() == nullptr)
 		{
 			return false;
 		}
-		return InItem.Instance->GetItemDef() == ItemDef && InItem.StackCount < ItemDef.GetDefaultObject()->MaxStackAmount;
+		return InItem.GetItemDef() == ItemDef && InItem.StackCount < ItemDef->MaxStackAmount;
 	});
 
 	if (Index < 0)
@@ -108,10 +114,10 @@ void FInventoryList::FindStack(const TSubclassOf<UInventoryItemDefinition>& Item
 		return;
 	}
 	
-	RemainAmount = ItemDef.GetDefaultObject()->MaxStackAmount - Slots[Index].StackCount;
+	RemainAmount = ItemDef->MaxStackAmount - Slots[Index].StackCount;
 }
 
-int FInventoryList::AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride)
+int FInventoryList::AddItem(UInventoryItemDefinition* ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride)
 {
 	if (ItemDef == nullptr)
 	{
@@ -153,7 +159,7 @@ int FInventoryList::AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef
 	
 	// Begin find empty.
 	// Const max stack amount.
-	const int maxStack = ItemDef.GetDefaultObject()->MaxStackAmount;
+	const int maxStack = ItemDef->MaxStackAmount;
 	// First find empty.
 	int FindEmptyIndex = FindEmpty();
 			
@@ -184,7 +190,7 @@ int FInventoryList::AddItem(const TSubclassOf<UInventoryItemDefinition>& ItemDef
 	return Count;
 }
 
-void FInventoryList::SetItemAt(const TSubclassOf<UInventoryItemDefinition>& ItemDef, const int Count,
+void FInventoryList::SetItemAt(UInventoryItemDefinition* ItemDef, const int Count,
 	const TArray<FGameplayTagStack>& TagStackOverride, const int& Index)
 {
 	if (!Slots.IsValidIndex(Index))
@@ -206,34 +212,32 @@ void FInventoryList::SetItemAt(const TSubclassOf<UInventoryItemDefinition>& Item
 	Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
 }
 
-FInventorySlot FInventoryList::AddNewInstance(const TSubclassOf<UInventoryItemDefinition>& ItemDef, const int StackAmount) const
+FInventorySlot FInventoryList::AddNewInstance(UInventoryItemDefinition* ItemDef, const int StackAmount) const
 {
 	FInventorySlot Slot;
 	Slot.StackCount = StackAmount;
 
 	//check instance bp type is valid
-	auto InstanceType = ItemDef.GetDefaultObject()->Instance_BP;
-	if (InstanceType != nullptr)
+	if (auto InstanceInDef = DuplicateObject(ItemDef->ItemInstance, OwnerComponent->GetOwner()))
 	{
-		Slot.Instance = NewObject<UInventoryItemInstance>(OwnerComponent->GetOwner(), InstanceType);
+		Slot.Instance = InstanceInDef;
+		// Trigger instance created event, can override by child class.
+		Slot.ItemDefinition = ItemDef;
+		Slot.Instance->SetItemDef(ItemDef);
+		
+		for (const UInventoryItemFragment* Fragment : ItemDef->Fragments)
+		{
+			if (Fragment != nullptr)
+			{
+				Fragment->OnInstanceCreated(Slot.Instance);
+			}
+		}
+		Slot.Instance->OnInstanceCreated();
 	}
 	else
 	{
-		Slot.Instance = NewObject<UInventoryItemInstance>(OwnerComponent->GetOwner(), UInventoryItemInstance::StaticClass());
+		Slot.ItemDefinition = ItemDef;
 	}
-	
-	// Trigger instance created event, can override by child class.
-	Slot.Instance->SetItemDef(ItemDef);
-	
-	for (const UInventoryItemFragment* Fragment : GetDefault<UInventoryItemDefinition>(ItemDef)->Fragments)
-	{
-		if (Fragment != nullptr)
-		{
-			Fragment->OnInstanceCreated(Slot.Instance);
-		}
-	}
-	
-	Slot.Instance->OnInstanceCreated();
 	
 	return Slot;
 }
@@ -275,7 +279,7 @@ void FInventoryList::RemoveItemAt(const int Index, const int Amount)
 	Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
 }
 
-bool FInventoryList::ItemDefUsed(const TSubclassOf<UInventoryItemDefinition>& ItemDef, int Amount)
+bool FInventoryList::ItemDefUsed(const UInventoryItemDefinition* ItemDef, int Amount)
 {
 	if (ItemDef == nullptr || Amount <= 0 || GetTotalItemAmount(ItemDef) < Amount)
 	{
@@ -285,12 +289,12 @@ bool FInventoryList::ItemDefUsed(const TSubclassOf<UInventoryItemDefinition>& It
 	for (int ID = 0; ID < Slots.Num(); ID++)
 	{
 		auto Slot = Slots[ID];
-		if (!Slot.Instance)
+		if (!Slot.GetItemDef())
 		{
 			continue;
 		}
 		
-		if (Slot.Instance->GetItemDef() == ItemDef && Amount != 0)
+		if (Slot.GetItemDef() == ItemDef && Amount != 0)
 		{
 			if (Amount > Slot.StackCount)
 			{
@@ -320,12 +324,12 @@ void FInventoryList::DragDropItem(const int DragIndex, const int DropIndex)
 		return;
 	}
 	
-	if (Slots[DragIndex].Instance != nullptr
-		&& Slots[DropIndex].Instance != nullptr
-		&& Slots[DragIndex].Instance->GetItemDef() == Slots[DropIndex].Instance->GetItemDef())
+	if (Slots[DragIndex].GetItemDef() != nullptr
+		&& Slots[DropIndex].GetItemDef() != nullptr
+		&& Slots[DragIndex].GetItemDef() == Slots[DropIndex].GetItemDef())
 	{
 		//Stack
-		const int maxStackAmount = Slots[DragIndex].Instance->GetItemDef().GetDefaultObject()->MaxStackAmount;
+		const int maxStackAmount = Slots[DragIndex].GetItemDef()->MaxStackAmount;
 		const int finalAmount = Slots[DropIndex].StackCount + Slots[DragIndex].StackCount;
 		const int calculateAmount = finalAmount - maxStackAmount;
 		if (Slots[DropIndex].StackCount != maxStackAmount)
@@ -359,19 +363,14 @@ void FInventoryList::DragDropItem(const int DragIndex, const int DropIndex)
 	Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
 }
 
-int FInventoryList::GetTotalItemAmount(const TSubclassOf<UInventoryItemDefinition>& ItemDef)
+int FInventoryList::GetTotalItemAmount(const UInventoryItemDefinition* ItemDef)
 {
 	if (ItemDef != nullptr)
 	{
 		int LocalTotalAmount = 0;
 		for (FInventorySlot Slot : Slots)
 		{
-			if (Slot.Instance == nullptr)
-			{
-				continue;
-			}
-			
-			if (ItemDef == Slot.Instance->GetItemDef())
+			if (ItemDef == Slot.GetItemDef())
 			{
 				LocalTotalAmount += Slot.StackCount;
 			}
@@ -439,7 +438,10 @@ void UInventoryManagerComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	TArray<AActor*> NotValidatedItemPtrs;
-	SphereComp->GetOverlappingActors(NotValidatedItemPtrs, AItemActor_Base::StaticClass());
+	if (SphereComp)
+	{
+		SphereComp->GetOverlappingActors(NotValidatedItemPtrs, AItemActor_Base::StaticClass());
+	}
 	const auto CachedOverlappedActors = OverlappedActorsPtrs;
 	OverlappedActorsPtrs.Empty();
 
@@ -540,7 +542,7 @@ void UInventoryManagerComponent::OnRep_List()
 	}
 }
 
-int UInventoryManagerComponent::AddItem(const TArray<FGameplayTagStack> TagStackOverride, const TSubclassOf<UInventoryItemDefinition> ItemDef, const int Count)
+int UInventoryManagerComponent::AddItem(const TArray<FGameplayTagStack> TagStackOverride, UInventoryItemDefinition* ItemDef, const int Count)
 {
 	if (ItemDef != nullptr)
 	{
@@ -552,18 +554,18 @@ int UInventoryManagerComponent::AddItem(const TArray<FGameplayTagStack> TagStack
 	return -1;
 }
 
-bool UInventoryManagerComponent::ItemDefUsed(const TSubclassOf<UInventoryItemDefinition> ItemDef, const int Amount)
+bool UInventoryManagerComponent::ItemDefUsed(const UInventoryItemDefinition* ItemDef, const int Amount)
 {
 	return InventoryList.ItemDefUsed(ItemDef, Amount);
 }
 
-int UInventoryManagerComponent::RecipeCraftTimes(const TSubclassOf<UInventoryItemRecipe> Recipe)
+int UInventoryManagerComponent::RecipeCraftTimes(UInventoryItemRecipe* Recipe)
 {
 	if (Recipe)
 	{
 		int MinTime = INT_MAX;
-		for (const auto NeedItems = Recipe.GetDefaultObject()->NeedItems;
-			const TPair<TSubclassOf<UInventoryItemDefinition>, int>& Pair : NeedItems)
+		for (const auto NeedItems = Recipe->NeedItems;
+			const TPair<UInventoryItemDefinition*, int>& Pair : NeedItems)
 		{
 			MinTime = FMath::Min(ItemTotalAmount(Pair.Key) / Pair.Value, MinTime);
 		}
@@ -572,12 +574,12 @@ int UInventoryManagerComponent::RecipeCraftTimes(const TSubclassOf<UInventoryIte
 	return -1;
 }
 
-bool UInventoryManagerComponent::CheckRecipeNeedItems(const TSubclassOf<UInventoryItemRecipe> Recipe)
+bool UInventoryManagerComponent::CheckRecipeNeedItems(const UInventoryItemRecipe* Recipe)
 {
 	if (IsValid(Recipe))
 	{
-		for (const auto NeedItems = Recipe.GetDefaultObject()->NeedItems; const TPair<
-			     TSubclassOf<UInventoryItemDefinition>, int>& Pair : NeedItems)
+		for (const auto NeedItems = Recipe->NeedItems; const TPair<
+			     UInventoryItemDefinition*, int>& Pair : NeedItems)
 		{
 			if (ItemTotalAmount(Pair.Key) < Pair.Value)
 			{
@@ -589,10 +591,10 @@ bool UInventoryManagerComponent::CheckRecipeNeedItems(const TSubclassOf<UInvento
 	return false;
 }
 
-void UInventoryManagerComponent::CraftItem_Implementation(const TSubclassOf<UInventoryItemRecipe> Recipe, const int Times)
+void UInventoryManagerComponent::CraftItem_Implementation(const UInventoryItemRecipe* Recipe, const int Times)
 {
-	const TMap<TSubclassOf<UInventoryItemDefinition>, int> Need = Recipe.GetDefaultObject()->NeedItems;
-    const TMap<TSubclassOf<UInventoryItemDefinition>, int> Out = Recipe.GetDefaultObject()->OutItems;
+	const TMap<UInventoryItemDefinition*, int> Need = Recipe->NeedItems;
+    const TMap<UInventoryItemDefinition*, int> Out = Recipe->OutItems;
     if (CheckRecipeNeedItems(Recipe)
     	&& CheckInventoryExchange(Need, Out, Times, Times))
     {
@@ -608,7 +610,7 @@ void UInventoryManagerComponent::CraftItem_Implementation(const TSubclassOf<UInv
     }
 }
 
-int UInventoryManagerComponent::ItemTotalAmount(const TSubclassOf<UInventoryItemDefinition> ItemDef)
+int UInventoryManagerComponent::ItemTotalAmount(const UInventoryItemDefinition* ItemDef)
 {
 	return InventoryList.GetTotalItemAmount(ItemDef);
 }
@@ -618,13 +620,13 @@ int UInventoryManagerComponent::FindEmpty()
 	return InventoryList.FindEmpty();
 }
 
-bool UInventoryManagerComponent::CheckInventoryExchange(TMap<TSubclassOf<UInventoryItemDefinition>, int> OutItems,
-	TMap<TSubclassOf<UInventoryItemDefinition>, int> InItems, const int OutTimes, const int InTimes)
+bool UInventoryManagerComponent::CheckInventoryExchange(TMap<UInventoryItemDefinition*, int> OutItems,
+	TMap<UInventoryItemDefinition*, int> InItems, const int OutTimes, const int InTimes)
 {
 	FInventoryList List = FInventoryList();
 	List = InventoryList;
 
-	for (const TPair<TSubclassOf<UInventoryItemDefinition>, int>& Pair : OutItems)
+	for (const TPair<UInventoryItemDefinition*, int>& Pair : OutItems)
 	{
 		if (!List.ItemDefUsed(Pair.Key, Pair.Value * OutTimes))
 		{
@@ -632,7 +634,7 @@ bool UInventoryManagerComponent::CheckInventoryExchange(TMap<TSubclassOf<UInvent
 		}
 	}
 
-	for (const TPair<TSubclassOf<UInventoryItemDefinition>, int>& Pair : InItems)
+	for (const TPair<UInventoryItemDefinition*, int>& Pair : InItems)
 	{
 		const TArray<FGameplayTagStack> TagStackOverride;
 		if (List.AddItem(Pair.Key, Pair.Value * InTimes, TagStackOverride) != 0)
@@ -651,31 +653,36 @@ void UInventoryManagerComponent::SplitItem_Implementation(const int Index, const
 	if (const int EmptyIndex = InventoryList.FindEmpty(); EmptyIndex >= 0)
 	{
 		TArray<FGameplayTagStack> StackTags;
-		if (Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[Index].Instance))
-		{
-			StackTags = Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[Index].Instance)->GetStatTags();
-		}
-		InventoryList.SetItemAt(InventoryList.Slots[Index].Instance->GetItemDef(), Amount, StackTags, EmptyIndex);
+		//if (Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[Index].Instance))
+		//{
+		//	StackTags = Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[Index].Instance)->GetStatTags();
+		//}
+		InventoryList.SetItemAt(InventoryList.Slots[Index].GetItemDef(), Amount, StackTags, EmptyIndex);
 		InventoryList.RemoveItemAt(Index, Amount);
 	}
 }
 
-bool UInventoryManagerComponent::DropItemCheck(const TObjectPtr<UInventoryItemInstance>& InstancePtr, FVector& DropLocation) const
+bool UInventoryManagerComponent::DropItemCheck(const UInventoryItemDefinition* ItemDef, FVector& DropLocation) const
 {
-	check(InstancePtr)
-	float CheckLength;
-	if (const auto Ptr1 = Cast<UInventoryFragment_StaticMesh>(InstancePtr->GetItemDef().GetDefaultObject()->FindFragmentByClass(UInventoryFragment_StaticMesh::StaticClass())))
+	check(ItemDef)
+	float CheckLength = 0.0f;
+	switch (ItemDef->MeshType)
 	{
-		CheckLength = Ptr1->PickupStaticMesh->GetBounds().SphereRadius * 2;
-	}
-	else if (const auto Ptr2 = Cast<UInventoryFragment_SkeletalMesh>(InstancePtr->GetItemDef().GetDefaultObject()->FindFragmentByClass(UInventoryFragment_SkeletalMesh::StaticClass())))
-	{
-		CheckLength = Ptr2->PickupSkeletalMesh->GetBounds().SphereRadius * 2;
-	}
-	else
-	{
-		// not drop item if item has no model to spawn
-		return false;
+	case MT_None: return false;
+		break;
+	case MT_StaticMesh:
+		if (const auto Ptr1 = Cast<UInventoryFragment_StaticMesh>(ItemDef->MeshSettings))
+		{
+			CheckLength = Ptr1->PickupStaticMesh->GetBounds().SphereRadius * 2;
+		}
+		break;
+	case MT_SkeletalMesh:
+		if (const auto Ptr2 = Cast<UInventoryFragment_SkeletalMesh>(ItemDef->MeshSettings))
+		{
+			CheckLength = Ptr2->PickupSkeletalMesh->GetBounds().SphereRadius * 2;
+		}
+		break;
+	default: return false;
 	}
 	
 	const FVector ActorLocation = GetOwner()->GetActorLocation();
@@ -690,7 +697,7 @@ void UInventoryManagerComponent::DropItem_Implementation(const int Index, const 
 {
 	if (InventoryList.Slots.IsValidIndex(Index))
 	{
-		if (FVector DropLocation; DropItemCheck(InventoryList.Slots[Index].Instance,DropLocation))
+		if (FVector DropLocation; DropItemCheck(InventoryList.Slots[Index].GetItemDef(),DropLocation))
 		{
 			const auto Instance = InventoryList.Slots[Index].Instance;
 			FGameplayTagStackContainer TagContainer;
@@ -698,7 +705,7 @@ void UInventoryManagerComponent::DropItem_Implementation(const int Index, const 
 			{
 				TagContainer = StatTagsInstance->GetStatTagsContainer();
 			}
-			CreateItemActorInFront(Instance->GetItemDef(), Amount, TagContainer, DropLocation);
+			CreateItemActorInFront(InventoryList.Slots[Index].GetItemDef(), Amount, TagContainer, DropLocation);
 			RemoveItem(Index, Amount);
 		}
 		else
@@ -724,15 +731,14 @@ void UInventoryManagerComponent::RemoveItem_Implementation(const int Index, cons
 	InventoryList.RemoveItemAt(Index, Amount);
 }
 
-void UInventoryManagerComponent::CreateItemActorInFront_Implementation(const TSubclassOf<UInventoryItemDefinition> ItemDef,
-                                                                       const int Count, const FGameplayTagStackContainer TagStackContainer, const FVector DropLocation)
+void UInventoryManagerComponent::CreateItemActorInFront_Implementation(const UInventoryItemDefinition* ItemDef, int Count, FGameplayTagStackContainer TagStackContainer, FVector DropLocation)
 {
 	FActorSpawnParameters SpawnInfo;
 	SpawnInfo.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	const FTransform ActorTransform = FTransform(GetOwner()->GetActorForwardVector().ToOrientationRotator(), DropLocation);
 
 	//use project settings cpp class or bp class
-	UClass* Class = AItemActor_Base::StaticClass();
+	UClass* Class = AItemActor_Common::StaticClass();
 	if (const UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
 	{
 		if (Settings->GetDynamicItemActorClass())
@@ -743,9 +749,9 @@ void UInventoryManagerComponent::CreateItemActorInFront_Implementation(const TSu
 	
 	//Spawn dynamic actor;
 
-	if (AItemActor_Base* NewActor = GetWorld()->SpawnActorDeferred<AItemActor_Base>(Class, ActorTransform))
+	if (AItemActor_Common* NewActor = GetWorld()->SpawnActorDeferred<AItemActor_Common>(Class, ActorTransform))
 	{
-		NewActor->ItemID = ItemDef;
+		NewActor->ItemID = const_cast<UInventoryItemDefinition*>(ItemDef);
 		NewActor->Amount = Count;
 		NewActor->OverrideTagStack = TagStackContainer.GetTagStacks();
 		
@@ -776,12 +782,12 @@ void UInventoryManagerComponent::DragItemToContainer_Implementation(UInventoryCo
 		return;
 	}
 	
-	if (InventoryList.Slots[DragIndex].Instance != nullptr
+	if (InventoryList.Slots[DragIndex].GetItemDef() != nullptr
 		&& Container->List.Slots[DropIndex].ItemID != nullptr
-		&& InventoryList.Slots[DragIndex].Instance->GetItemDef() == Container->List.Slots[DropIndex].ItemID)
+		&& InventoryList.Slots[DragIndex].GetItemDef() == Container->List.Slots[DropIndex].ItemID)
 	{
 		//Stack
-		const int MaxStackAmount = InventoryList.Slots[DragIndex].Instance->GetItemDef().GetDefaultObject()->MaxStackAmount;
+		const int MaxStackAmount = InventoryList.Slots[DragIndex].GetItemDef()->MaxStackAmount;
 		const int FinalAmount = Container->List.Slots[DropIndex].StackCount + InventoryList.Slots[DragIndex].StackCount;
 		const int CalculateAmount = FinalAmount - MaxStackAmount;
 		if (Container->List.Slots[DropIndex].StackCount != MaxStackAmount)
@@ -805,7 +811,7 @@ void UInventoryManagerComponent::DragItemToContainer_Implementation(UInventoryCo
 	}
 	
 	//Switch
-	const auto DragItemDef = InventoryList.Slots[DragIndex].Instance->GetItemDef();
+	const auto DragItemDef = InventoryList.Slots[DragIndex].GetItemDef();
 	const auto StackCount = InventoryList.Slots[DragIndex].StackCount;
 	const auto Instance = Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[DragIndex].Instance);
 	const FContainerSlot Slot = Container->List.Slots[DropIndex];
@@ -878,51 +884,64 @@ FInventorySaveData UInventoryManagerComponent::GetSaveData()
 	FInventorySaveData InventorySaveData;
 	InventorySaveData.SlotsAmount = InventorySlotAmount;
 	InventorySaveData.SelectedQuickBarIndex = SelectedQuickBarIndex;
-	int SlotIndex = 0;
-	for (FInventorySlot Slot : InventoryList.Slots)
+	InventorySaveData.bIsValid = true;
+	for (int Idx = 0; Idx < InventoryList.Slots.Num(); Idx++)
 	{
-		if (Slot.Instance != nullptr)
+		if (!InventoryList.Slots[Idx].GetItemDef())
 		{
-			InventorySaveData.ItemID.Add(Slot.Instance->GetItemDef());
-			InventorySaveData.StackCount.Add(Slot.StackCount);
-			FGameplayTagStackContainer TagContainer;
-			if (const auto statTagsInstance = Cast<UInventoryItemInstance_StatTags>(Slot.Instance))
-			{
-				TagContainer.SetStackTags(statTagsInstance->GetStatTags());
-			}
-			InventorySaveData.StackTags.Add(TagContainer);
-			InventorySaveData.SlotIndex.Add(SlotIndex);
+			continue;
 		}
-		SlotIndex++;
+
+		TArray<uint8> InstanceData;
+		if (auto InstancePtr = InventoryList.Slots[Idx].Instance)
+		{
+			// Save to binary
+			InstancePtr->K2_OnPreSaveGame();
+			FMemoryWriter MemoryWriter(InstanceData, true);
+			FItemInstanceArchive Ar (MemoryWriter);
+			InstancePtr->Serialize(Ar);
+		}
+		
+		auto NewSlotData = FItemSlotSaveData(InstanceData, InventoryList.Slots[Idx].GetItemDef(), InventoryList.Slots[Idx].StackCount);
+		InventorySaveData.SlotDataMap.Add(Idx, NewSlotData);
 	}
+	
 	return InventorySaveData;
 }
 
 bool UInventoryManagerComponent::LoadSaveData(FInventorySaveData SaveData)
 {
-	ClearItems();
-	if (SaveData.IsValid())
+	if (!SaveData.IsValid())
 	{
-		//设置空slot数量
-		InventorySlotAmount = SaveData.SlotsAmount;
-		InventoryList.Slots.Empty();
-		InventoryList.AddEmptySlots(InventorySlotAmount);
-
-		int Index = 0;
-		for (const auto SlotIndex : SaveData.SlotIndex)
-		{
-			if (SlotIndex >= 0)
-			{
-				const TArray<FGameplayTagStack> StackTags = SaveData.StackTags[Index].GetTagStacks();
-				InventoryList.SetItemAt(SaveData.ItemID[Index], SaveData.StackCount[Index], StackTags, SlotIndex);
-				Index++;
-			}
-		}
-		SelectedQuickBarIndex = SaveData.SelectedQuickBarIndex;
-		OnRep_SelectedQuickBarIndex();
-		return true;
+		return false;
 	}
-	return false;
+	
+	ClearItems();
+	// Set empty slot
+	InventorySlotAmount = SaveData.SlotsAmount;
+	InventoryList.Slots.Empty();
+	InventoryList.AddEmptySlots(InventorySlotAmount);
+
+	for (auto DataPair : SaveData.SlotDataMap)
+	{
+		InventoryList.Slots[DataPair.Key].ItemDefinition = DataPair.Value.ItemDefinition;
+		InventoryList.Slots[DataPair.Key].StackCount = DataPair.Value.StackCount;
+		if (auto InstanceInDef = DuplicateObject(DataPair.Value.ItemDefinition->ItemInstance, GetOwner()))
+		{
+			InventoryList.Slots[DataPair.Key].Instance = InstanceInDef;
+			InstanceInDef->SetItemDef(DataPair.Value.ItemDefinition);
+			// Load instance
+			FMemoryReader MemoryReader(DataPair.Value.Data, true);
+			FItemInstanceArchive Ar(MemoryReader);
+			InstanceInDef->Serialize(Ar);
+			InstanceInDef->K2_OnPostLoadGame();
+		}
+		InventoryList.MarkItemDirty(InventoryList.Slots[DataPair.Key]);
+	}
+	
+	SelectedQuickBarIndex = SaveData.SelectedQuickBarIndex;
+	OnRep_SelectedQuickBarIndex();
+	return true;
 }
 
 void UInventoryManagerComponent::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
