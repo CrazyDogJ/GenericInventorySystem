@@ -17,6 +17,8 @@ class INVENTORY_API UInventoryItemInstance_StatTags : public UInventoryItemInsta
 
 public:
 	UInventoryItemInstance_StatTags(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+	virtual void OnInstanceCreated() override;
 	
 	// Adds a specified number of stacks to the tag (does nothing if StackCount is below 1)
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category=Inventory)

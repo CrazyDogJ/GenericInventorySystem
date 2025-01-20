@@ -14,18 +14,10 @@ struct FQualitySetting
 {
 	GENERATED_BODY()
 
-	FQualitySetting()
-	{
-		QualityTag = FGameplayTag::EmptyTag;
-		QualityColor = FLinearColor::Transparent;
-		QualityName = FText();
-	};
+	FQualitySetting() : QualityColor(FLinearColor::Transparent) {}
 	
-	FQualitySetting(const FGameplayTag Tag, const FLinearColor Color, const FText& Name);
-	
-public:
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Quality", meta = (Categories="InventoryQuality"))
-	FGameplayTag QualityTag;
+	FQualitySetting(const FLinearColor Color, const FText& Name)
+		: QualityColor(Color), QualityName(Name) {}
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Quality")
 	FLinearColor QualityColor;
@@ -35,32 +27,17 @@ public:
 };
 
 USTRUCT(BlueprintType)
-struct FInventoryGameplayTagSetting
+struct FItemCategory
 {
 	GENERATED_BODY()
-
-	FInventoryGameplayTagSetting()
-	{
-		OtherGameplayTag = FGameplayTag::EmptyTag;
-		OtherGameplayTagLocName = FText();
-		OtherGameplayTagLocDesc = FText();
-	};
 	
-	FInventoryGameplayTagSetting(const FGameplayTag Tag, const FText& LocName, const FText& LocDesc);
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Category")
+	FText CategoryName = FText::FromString("");
 
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
-	FGameplayTag OtherGameplayTag;
-
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
-	FText OtherGameplayTagLocName;
-
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
-	FText OtherGameplayTagLocDesc;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Category")
+	FText CategoryDescription = FText::FromString("");
 };
 
-/**
- * 
- */
 UCLASS(config = InventorySetting, DefaultConfig, NotPlaceable)
 class INVENTORY_API UInventorySettings : public UObject
 {
@@ -68,12 +45,13 @@ class INVENTORY_API UInventorySettings : public UObject
 
 public:
 	UInventorySettings(const FObjectInitializer& obj);
-
-	static FQualitySetting MakeQualitySetting(FName TagName, FLinearColor Color, const FText& Name);
+	
 	TSubclassOf<AItemActor_Common> GetDynamicItemActorClass() const;
+	static FGameplayTag MakeGameplayTag(FName TagName);
+	
 	/** Project items quality settings */
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory")
-	TArray<FQualitySetting> QualitySettings;
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory", meta=(Categories="Inventory.Quality"))
+	TMap<FGameplayTag, FQualitySetting> QualitySettings;
 
 	/** Post process material high light stencil */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory", meta=(UIMin = 0, UIMax = 255, ClampMin = 0, ClampMax = 255))
@@ -83,6 +61,17 @@ public:
 	TMap<FGameplayTag, TSoftClassPtr<UInventoryBuffInfoBase>> BuffInfos;
 
 	/** Class of dynamic item actor class */
-	UPROPERTY(EditAnywhere, config, meta = (MetaClass = "/Script/Inventory.ItemActor_Common"))
+	UPROPERTY(Config, EditAnywhere, Category = "Inventory", meta = (MetaClass = "/Script/Inventory.ItemActor_Common"))
 	FSoftClassPath DynamicItemActorClass;
+	
+	/** If we can't find category in ItemCategories, we use default category description */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Category", meta=(Categories="Inventory.Category"))
+	FGameplayTag DefaultCategoryTag;
+	
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Category")
+	FItemCategory DefaultCategory;
+	
+	/** Item slot categories */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Category", meta=(Categories="Inventory.Category"))
+	TMap<FGameplayTag, FItemCategory> ItemCategories;
 };

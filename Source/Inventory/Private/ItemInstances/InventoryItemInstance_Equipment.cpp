@@ -9,8 +9,8 @@
 
 void UInventoryItemInstance_Equipment::OnEquipped()
 {
-	auto AbilitySets = Cast<UInventoryFragment_Equipment>(FindFragmentByClass(UInventoryFragment_Equipment::StaticClass()))->AbilitySetsToGrant;
 	const auto ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Cast<AActor>(GetOuter()));
+	ensure(ASC);
 	for (auto abilitySet : AbilitySets)
 	{
 		abilitySet.Get()->GiveToAbilitySystem(ASC, &GrantedHandles, this);
@@ -28,6 +28,6 @@ void UInventoryItemInstance_Equipment::OnUnequipped()
 void UInventoryItemInstance_Equipment::OnInstanceDestroyed()
 {
 	OnUnequipped();
-	
+	OnCategoryChanged(FGameplayTag::EmptyTag);
 	Super::OnInstanceDestroyed();
 }

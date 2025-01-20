@@ -3,10 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "UObject/Object.h"
 #include "InventoryItemInstance.generated.h"
 
 class UInventoryItemDefinition;
+class UInventoryManagerComponent;
+struct FInventorySlot;
+
 /**
  * Inventory Item Instance that can be blueprintable in order to make custom events.
  */
@@ -16,15 +20,18 @@ class INVENTORY_API UInventoryItemInstance : public UObject, public FTickableGam
 	GENERATED_BODY()
 
 public:
+	// Construct
 	UInventoryItemInstance(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	//~UObject interface
+	// UObject interface
 	virtual bool IsSupportedForNetworking() const override { return true; }
 	virtual UWorld* GetWorld() const override final;
 	virtual void Tick(float DeltaTime) override;
 	virtual bool IsTickable() const override;
 	virtual TStatId GetStatId() const override;
-	//~End of UObject interface
+	virtual int32 GetFunctionCallspace(UFunction* Function, FFrame* Stack) override;
+	virtual bool CallRemoteFunction(UFunction* Function, void* Parms, struct FOutParmRec* OutParms, FFrame* Stack) override;
+	// End of UObject interface
 
 	UFUNCTION(BlueprintPure)
 	UObject* GetInstigator() const { return Instigator; }
@@ -33,6 +40,12 @@ public:
 	
 	UFUNCTION(BlueprintPure)
 	APawn* GetPawn() const;
+
+	UFUNCTION(BlueprintPure)
+	UInventoryManagerComponent* GetInventoryManager() const;
+
+	UPROPERTY(BlueprintReadOnly)
+	FGameplayTag CategoryTag;
 	
 	virtual void OnInstanceCreated()
 	{
@@ -45,6 +58,17 @@ public:
 	{
 		bUseTick = false;
 		K2_OnInstanceDestroyed();
+		ConditionalBeginDestroy();
+	}
+
+	virtual void OnCategoryChanged(const FGameplayTag& NewCategory)
+	{
+		if (NewCategory != CategoryTag)
+		{
+			auto PrevCategory = CategoryTag;
+			CategoryTag = NewCategory;
+			K2_OnCategoryChanged(PrevCategory, NewCategory);
+		}
 	}
 	
 	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Instance Created")
@@ -58,6 +82,9 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Pose Load Game")
 	void K2_OnPostLoadGame();
+
+	UFUNCTION(BlueprintImplementableEvent, DisplayName="On Category Changed")
+	void K2_OnCategoryChanged(const FGameplayTag& PrevCategory, const FGameplayTag& NewCategory);
 	
 	UFUNCTION(BlueprintImplementableEvent, DisplayName="Tick")
 	void K2_Tick(float deltaTime);
@@ -76,8 +103,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure=false, meta=(DeterminesOutputType=FragmentClass))
 	const UInventoryItemFragment* FindFragmentByClass(TSubclassOf<UInventoryItemFragment> FragmentClass) const;
 
-	void SetItemDef(UInventoryItemDefinition* InDef);
-
+	void SetItemDef(const UInventoryItemDefinition* InDef);
 private:
 	UFUNCTION()
 	void OnRep_Instigator();

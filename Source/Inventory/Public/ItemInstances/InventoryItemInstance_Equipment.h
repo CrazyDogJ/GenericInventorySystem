@@ -18,10 +18,13 @@ class INVENTORY_API UInventoryItemInstance_Equipment : public UInventoryItemInst
 public:
 	UPROPERTY(BlueprintReadOnly)
 	FAbilitySet_GrantedHandles GrantedHandles;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TArray<TObjectPtr<const UAbilitySet>> AbilitySets;
 	
 	virtual void OnEquipped();
 	virtual void OnUnequipped();
-
+	
 	virtual void OnInstanceDestroyed() override;
 	
 protected:

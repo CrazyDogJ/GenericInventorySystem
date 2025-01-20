@@ -9,7 +9,7 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(BlueprintType)
 class INVENTORY_API UInventoryFragment_SkeletalMesh : public UInventoryFragment_Mesh
 {
 	GENERATED_BODY()

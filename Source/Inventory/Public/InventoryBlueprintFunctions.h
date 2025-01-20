@@ -18,7 +18,7 @@ class INVENTORY_API UInventoryBlueprintFunctions : public UBlueprintFunctionLibr
 
 public:
 	UFUNCTION(BlueprintPure, Category = Inventory)
-	static TArray<FQualitySetting> GetQualitySettings();
+	static TMap<FGameplayTag, FQualitySetting> GetQualitySettings();
 
 	UFUNCTION(BlueprintPure, Category = Inventory)
 	static FLinearColor GetQualityColorByGameplayTag(const FGameplayTag Tag);
@@ -65,7 +65,10 @@ public:
 	static void ReleaseInputByTag(UAbilitySystemComponent* ASC, const FGameplayTag& InTag);
 
 	UFUNCTION(BlueprintPure)
-	static UInventoryItemDefinition* GetItemDefinition(const FInventorySlot& InSlot);
+	static int GetItemStackCount(const FInventorySlot& InSlot);
+	
+	UFUNCTION(BlueprintCallable)
+	static bool FindCategoryStruct(FGameplayTag InTag, FItemCategory& OutCategory);
 private:
 	static TObjectPtr<UInventorySettings> GetInventoryProjectSettings();
 };

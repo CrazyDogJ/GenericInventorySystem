@@ -9,42 +9,30 @@
 #include "InventoryItemDefinition.h"
 #include "ItemInstances/InventoryItemInstance_StatTags.h"
 
-TArray<FQualitySetting> UInventoryBlueprintFunctions::GetQualitySettings()
+TMap<FGameplayTag, FQualitySetting> UInventoryBlueprintFunctions::GetQualitySettings()
 {
 	if (auto Settings = GetInventoryProjectSettings())
 	{
 		return Settings->QualitySettings;
 	}
-	TArray<FQualitySetting> empty;
-	return empty;
+	TMap<FGameplayTag, FQualitySetting> Empty;
+	return Empty;
 }
 
 FLinearColor UInventoryBlueprintFunctions::GetQualityColorByGameplayTag(const FGameplayTag Tag)
 {
-	if (auto Settings = GetInventoryProjectSettings())
+	if (auto Found = GetQualitySettings().Find(Tag))
 	{
-		for (auto setting : Settings->QualitySettings)
-		{
-			if (setting.QualityTag == Tag)
-			{
-				return setting.QualityColor;
-			}
-		}
+		return Found->QualityColor;
 	}
 	return FLinearColor::Transparent;
 }
 
 FText UInventoryBlueprintFunctions::GetQualityNameByGameplayTag(const FGameplayTag Tag)
 {
-	if (auto Settings = GetInventoryProjectSettings())
+	if (auto Found = GetQualitySettings().Find(Tag))
 	{
-		for (auto setting : Settings->QualitySettings)
-		{
-			if (setting.QualityTag == Tag)
-			{
-				return setting.QualityName;
-			}
-		}
+		return Found->QualityName;
 	}
 	return FText::FromString("Not valid tag!");
 }
@@ -187,9 +175,28 @@ void UInventoryBlueprintFunctions::ReleaseInputByTag(UAbilitySystemComponent* AS
 	}
 }
 
-UInventoryItemDefinition* UInventoryBlueprintFunctions::GetItemDefinition(const FInventorySlot& InSlot)
+int UInventoryBlueprintFunctions::GetItemStackCount(const FInventorySlot& InSlot)
 {
-	return InSlot.GetItemDef();
+	return InSlot.GetItemStackCount();
+}
+
+bool UInventoryBlueprintFunctions::FindCategoryStruct(FGameplayTag InTag, FItemCategory& OutCategory)
+{
+	OutCategory = FItemCategory();
+	if (auto Settings = GetInventoryProjectSettings())
+	{
+		TMap<FGameplayTag, FItemCategory> TotalCategories;
+		TotalCategories.Add(Settings->DefaultCategoryTag, Settings->DefaultCategory);
+		TotalCategories.Append(Settings->ItemCategories);
+		if (auto Found = TotalCategories.Find(InTag))
+		{
+			OutCategory = *Found;
+			return true;
+		}
+		OutCategory = Settings->DefaultCategory;
+		return false;
+	}
+	return false;
 }
 
 TObjectPtr<UInventorySettings> UInventoryBlueprintFunctions::GetInventoryProjectSettings()

@@ -4,6 +4,7 @@
 #include "ItemActors/ItemActor_Common.h"
 
 #include "InventoryItemDefinition.h"
+#include "InventoryManagerComponent.h"
 #include "Fragments/InventoryFragment_SkeletalMesh.h"
 #include "Fragments/InventoryFragment_StaticMesh.h"
 
@@ -18,6 +19,15 @@ AItemActor_Common::AItemActor_Common()
 
 	ItemStaticMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemStaticMeshComponent"));
 	ItemSkeletalMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ItemSkeletalMeshComponent"));
+}
+
+void AItemActor_Common::SetupActor(const FInventorySlot& Slot)
+{
+	ItemID = Slot.ItemDefinition;
+	Amount = Slot.StackAmount;
+	ItemInstances = Slot.StackedInstances;
+	// This function will be used in drop item feature, we will make it false to store the item instance in slot.
+	bUseDefaultInstance = false;
 }
 
 void AItemActor_Common::InitComps(const FTransform& Transform)
@@ -123,7 +133,7 @@ bool AItemActor_Common::IsRuntimeActor() const
 	// Copy from spud lib.
 	
 	// RF_WasLoaded means it was part of a level
-	// But not being part of a level might not means it needs to be respawned, it might have been
+	// But not being part of a level might not mean it needs to be respawned, it might have been
 	// auto-spawned e.g. Game Modes, pawns
 
 	bool Ret;
@@ -146,6 +156,7 @@ bool AItemActor_Common::IsRuntimeActor() const
 	return Ret;
 }
 
+#if WITH_EDITOR
 void AItemActor_Common::SimulatePhysics()
 {
 	bIsSimulatingPhysicsInEditor = true;
@@ -160,6 +171,35 @@ void AItemActor_Common::SimulatePhysics()
 		}
 	}
 }
+
+void AItemActor_Common::RefreshMesh()
+{
+	/** If item definition or amount is not valid, we will use SceneComponent to store current actor's transform */
+	if (!ItemID)
+	{
+		SetRootComponent(ItemStaticMeshComponent);
+		ItemStaticMeshComponent->SetStaticMesh(nullptr);
+		ItemSkeletalMeshComponent->SetSkeletalMesh(nullptr);
+		ItemStaticMeshComponent->SetWorldTransform(GetActorTransform());
+		ItemSkeletalMeshComponent->SetWorldTransform(GetActorTransform());
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, FString::Printf(TEXT("Item definition not valid")));
+		return;
+	}
+	if (Amount <= 0 || Amount > ItemID->GetMaxMaxStackAmount())
+	{
+		SetRootComponent(ItemStaticMeshComponent);
+		ItemStaticMeshComponent->SetStaticMesh(nullptr);
+		ItemSkeletalMeshComponent->SetSkeletalMesh(nullptr);
+		ItemStaticMeshComponent->SetWorldTransform(GetActorTransform());
+		ItemSkeletalMeshComponent->SetWorldTransform(GetActorTransform());
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, FString::Printf(TEXT("Amount property is not right, max stack amount is %d"), ItemID->GetMaxMaxStackAmount()));
+		return;
+	}
+
+	/** Initialize components */
+	InitComps(GetActorTransform());
+}
+#endif
 
 void AItemActor_Common::OnConstruction(const FTransform& Transform)
 {
@@ -176,14 +216,14 @@ void AItemActor_Common::OnConstruction(const FTransform& Transform)
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, FString::Printf(TEXT("Item definition not valid")));
 		return;
 	}
-	if (Amount <= 0 || Amount > ItemID->MaxStackAmount)
+	if (Amount <= 0 || Amount > ItemID->GetMaxMaxStackAmount())
 	{
 		SetRootComponent(ItemStaticMeshComponent);
 		ItemStaticMeshComponent->SetStaticMesh(nullptr);
 		ItemSkeletalMeshComponent->SetSkeletalMesh(nullptr);
 		ItemStaticMeshComponent->SetWorldTransform(Transform);
 		ItemSkeletalMeshComponent->SetWorldTransform(Transform);
-		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, FString::Printf(TEXT("Amount property is not right, max stack amount is %d"), ItemID->MaxStackAmount));
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, FString::Printf(TEXT("Amount property is not right, max stack amount is %d"), ItemID->GetMaxMaxStackAmount()));
 		return;
 	}
 
@@ -215,7 +255,8 @@ void AItemActor_Common::Tick(float DeltaSeconds)
 		auto Copy = GetWorld()->SpawnActorDeferred<AItemActor_Common>(GetClass(), GetActorTransform());
 		Copy->ItemID = ItemID;
 		Copy->Amount = Amount;
-		Copy->OverrideTagStack = OverrideTagStack;
+		Copy->ItemInstances = ItemInstances;
+		Copy->bUseDefaultInstance = bUseDefaultInstance;
 		Copy->FinishSpawning(GetActorTransform());
 		
 		auto CopyRoot = Cast<UPrimitiveComponent>(Copy->GetRootComponent());

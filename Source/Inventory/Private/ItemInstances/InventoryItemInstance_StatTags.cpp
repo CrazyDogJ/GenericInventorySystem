@@ -10,6 +10,18 @@ UInventoryItemInstance_StatTags::UInventoryItemInstance_StatTags(const FObjectIn
 {
 }
 
+void UInventoryItemInstance_StatTags::OnInstanceCreated()
+{
+	Super::OnInstanceCreated();
+
+	TArray<FGameplayTagStack> DefaultStacks;
+	for (auto StatTag : DefaultStatTags)
+	{
+		DefaultStacks.Add(FGameplayTagStack(StatTag.Key, StatTag.Value));
+	}
+	StatTags.SetStackTags(DefaultStacks);
+}
+
 void UInventoryItemInstance_StatTags::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

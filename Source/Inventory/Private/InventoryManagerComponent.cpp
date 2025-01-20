@@ -3,94 +3,349 @@
 
 #include "InventoryManagerComponent.h"
 
+#include "BlueprintTypePromotion.h"
+#include "Inventory.h"
 #include "Fragments/InventoryFragment_SkeletalMesh.h"
+#include "Logging/LogMacros.h"
 #include "Fragments/InventoryFragment_StaticMesh.h"
 #include "InventoryItemDefinition.h"
-#include "InventoryContainerComponent.h"
 #include "ItemInstances/InventoryItemInstance_Equipment.h"
-#include "ItemInstances/InventoryItemInstance_StatTags.h"
 #include "InventorySettings.h"
 #include "Components/SphereComponent.h"
 #include "Engine/ActorChannel.h"
 #include "ItemActors/ItemActor_Common.h"
 #include "Net/UnrealNetwork.h"
 
+#pragma region InventorySlot
+bool FInventorySlot::IsSlotEmpty() const
+{
+	return StackedInstances.IsEmpty() && ItemDefinition == nullptr && StackAmount == 0;
+}
 
 FString FInventorySlot::GetDebugString() const
 {
-	TObjectPtr<UInventoryItemDefinition> ItemDef = GetItemDef();
-
-	return FString::Printf(TEXT("%s (%d x %s)"), *GetNameSafe(Instance), StackCount, *GetNameSafe(ItemDef));
+	FString DebugString = FString::Printf(TEXT("Slot Category : %s, Item : %s * %d"), *SlotCategoryTag.ToString(), *ItemDefinition.GetName(), GetItemStackCount());
+	return DebugString;
 }
 
-FContainerSlot FInventorySlot::ToStruct() const
+void FInventorySlot::SwitchSlot(FInventorySlot& Slot)
 {
-	if (!GetItemDef())
+	if (ItemDefinition != nullptr && Slot.ItemDefinition != nullptr)
 	{
-		return FContainerSlot();
+		if (ItemDefinition->GetMaxStackAmount(Slot.SlotCategoryTag) < StackAmount || Slot.ItemDefinition->GetMaxStackAmount(SlotCategoryTag) < Slot.StackAmount)
+		{
+			return;
+		}
 	}
+	auto CachedStackedInstances = StackedInstances;
+	auto CachedItemDefinition = ItemDefinition;
+	auto CachedStackAmount = StackAmount;
+	
+	StackedInstances = Slot.StackedInstances;
+	ItemDefinition = Slot.ItemDefinition;
+	StackAmount = Slot.StackAmount;
 
-	FGameplayTagStackContainer Container;
-	if (auto StatInstance = Cast<UInventoryItemInstance_StatTags>(Instance))
-	{
-		Container = StatInstance->GetStatTagsContainer();
-	}
-	return FContainerSlot(GetItemDef(), StackCount, Container);
+	Slot.StackedInstances = CachedStackedInstances;
+	Slot.ItemDefinition = CachedItemDefinition;
+	Slot.StackAmount = CachedStackAmount;
 }
 
-TObjectPtr<UInventoryItemDefinition> FInventorySlot::GetItemDef() const
+int FInventorySlot::GetItemStackCount() const
 {
-	if (Instance)
+	if (ItemDefinition != nullptr)
 	{
-		return Instance->GetItemDef();
+		if (ItemDefinition->ItemInstanceType == IIT_Multiple)
+		{
+			return StackedInstances.Num();
+		}
+		return StackAmount;
 	}
-	return ItemDefinition;
+	return 0;
+}
+#pragma endregion 
+
+void FInventoryList::PreReplicatedRemove(const TArrayView<int32>& RemovedIndices, int32 FinalSize)
+{
+	NotifyComponentListChanged(RemovedIndices, ChangeType_Removed);
 }
 
-void FInventoryList::PreReplicatedRemove(const TArrayView<int32> RemovedIndices, int32 FinalSize)
+void FInventoryList::PostReplicatedAdd(const TArrayView<int32>& AddedIndices, int32 FinalSize)
 {
-	if (!OwnerComponent)
+	NotifyComponentListChanged(AddedIndices, ChangeType_Added);
+}
+
+void FInventoryList::PostReplicatedChange(const TArrayView<int32>& ChangedIndices, int32 FinalSize)
+{
+	NotifyComponentListChanged(ChangedIndices, ChangeType_Changed);
+}
+
+void FInventoryList::NotifyComponentListChanged(const FInventorySlot& Slot, const int Index,
+                                                const TEnumAsByte<EArrayChangeType> ChangeType) const
+{
+	if (auto InventoryManagerComp = Cast<UInventoryManagerComponent>(OwnerComponent))
+	{
+		InventoryManagerComp->K2_InventoryListChanged(Slot, Index, ChangeType);
+	}
+}
+
+void FInventoryList::NotifyComponentListChanged(const TArrayView<int32>& Indices,
+	const TEnumAsByte<EArrayChangeType> ChangeType)
+{
+	if (auto InventoryManagerComp = Cast<UInventoryManagerComponent>(OwnerComponent))
+	{
+		for (auto Index : Indices)
+		{
+			InventoryManagerComp->K2_InventoryListChanged(Slots[Index], Index, ChangeType);
+		}
+	}
+}
+
+void FInventoryList::EmptySlotAt(int Index)
+{
+	// Validate first.
+	if (!Slots.IsValidIndex(Index))
 	{
 		return;
 	}
-	Cast<UInventoryManagerComponent>(OwnerComponent)->OnInventoryListChanged.Broadcast();
-}
-
-void FInventoryList::PostReplicatedAdd(const TArrayView<int32> AddedIndices, int32 FinalSize)
-{
-	if (!OwnerComponent)
+	auto& Slot = Slots[Index];
+	if (Slot.IsSlotEmpty())
 	{
 		return;
 	}
-	Cast<UInventoryManagerComponent>(OwnerComponent)->OnInventoryListChanged.Broadcast();
+
+	// Destroy all instances and empty the slot.
+	for (auto InstanceItr : Slot.StackedInstances)
+	{
+		InstanceItr->OnInstanceDestroyed();
+	}
+	Slot.StackedInstances.Empty();
+	Slot.ItemDefinition = nullptr;
+	Slot.StackAmount = 0;
+
+	// Mark dirty.
+	MarkItemDirty(Slot);
+	NotifyComponentListChanged(Slot, Index, ChangeType_Changed);
 }
 
-void FInventoryList::PostReplicatedChange(const TArrayView<int32> ChangedIndices, int32 FinalSize)
+void FInventoryList::SetItemStackCountAt(int Index, int InCount)
 {
-	if (!OwnerComponent)
+	// Validate first.
+	if (!Slots.IsValidIndex(Index))
 	{
 		return;
 	}
-	Cast<UInventoryManagerComponent>(OwnerComponent)->OnInventoryListChanged.Broadcast();
-}
-
-void FInventoryList::AddEmptySlots(const int EmptySlotsAmount)
-{
-	Slots.SetNum(Slots.Num() + EmptySlotsAmount);
-	MarkArrayDirty();
-	Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
-}
-
-int FInventoryList::FindEmpty() const
-{
-	const int index = Slots.IndexOfByPredicate([](const FInventorySlot& InItem)
+	auto& Slot = Slots[Index];
+	if (Slot.ItemDefinition == nullptr || Slot.StackAmount == InCount)
 	{
-		return InItem.GetItemDef() == nullptr;
-	});
-	return index;
+		return;
+	}
+	
+	// Will empty the slot.
+	if (InCount == 0)
+	{
+		EmptySlotAt(Index);
+		return;
+	}
+	
+	// Check max stack amount.
+	auto FoundMaxStack = Slot.ItemDefinition->GetMaxStackAmount(Slot.SlotCategoryTag);
+	if (FoundMaxStack <= 0)
+	{
+		UE_LOG(LogInventory, Warning, TEXT("Test max stack finding here!"))
+		return;
+	}
+
+	// Calculation!!!
+	int Delta = InCount - Slot.StackAmount;
+	switch (Slot.ItemDefinition->ItemInstanceType)
+	{
+	case IIT_None:
+		Slot.StackAmount = FMath::Clamp(InCount, 1, FoundMaxStack);
+		break;
+	case IIT_OnlyOne:
+		// Deal with instances.
+		if (Slot.ItemDefinition->DefaultItemInstance == nullptr)
+		{
+			UE_LOG(LogInventory, Error, TEXT("Has no default item instance, please check item definition : %s"), *Slot.ItemDefinition->GetName())
+		}
+		else if (Delta > 0 && Slot.StackAmount == 0)
+		{
+			// Only one instance created
+			Slot.StackedInstances.Emplace(AddNewItemInstance(Slot.ItemDefinition));
+		}
+		Slot.StackAmount = FMath::Clamp(InCount, 1, FoundMaxStack);
+		break;
+	case IIT_Multiple:
+		// Deal with instances.
+		if (Slot.ItemDefinition->DefaultItemInstance == nullptr)
+		{
+			UE_LOG(LogInventory, Error, TEXT("Has no default item instance, please check item definition : %s"), *Slot.ItemDefinition->GetName())
+		}
+		else
+		{
+			if (Delta > 0)
+			{
+				// Add new instance
+				for (int Idx = 0; Idx < Delta; ++Idx)
+				{
+					Slot.StackedInstances.Emplace(AddNewItemInstance(Slot.ItemDefinition));
+				}
+			}
+			else
+			{
+				// Remove last instance
+				for (int Idx = 0; Idx > Delta; --Idx)
+				{
+					Slot.StackedInstances.Last()->OnInstanceDestroyed();
+					Slot.StackedInstances.RemoveAt(Slot.StackedInstances.Num() - 1);
+				}
+			}
+			Slot.StackAmount = FMath::Clamp(InCount, 1, FoundMaxStack);
+		}
+		break;
+	default: ;
+	}
+	
+	MarkItemDirty(Slot);
+	NotifyComponentListChanged(Slot, Index, ChangeType_Changed);
 }
 
-void FInventoryList::FindStack(const UInventoryItemDefinition* ItemDef, int& Index, int& RemainAmount)
+UInventoryItemInstance* FInventoryList::AddNewItemInstance(const UInventoryItemDefinition* ItemDef) const
+{
+	// Validate!
+	if (!ItemDef)
+	{
+		return nullptr;
+	}
+	if (ItemDef->ItemInstanceType == IIT_None || !ItemDef->DefaultItemInstance)
+	{
+		//Skip
+		//UE_LOG(LogInventory, Error, TEXT("Item Definition has no item instance class, please check this item def : %s"), *ItemDef->GetName());
+		return nullptr;
+	}
+	// If only one instance, we use exist item instance.
+	if (ItemDef->ItemInstanceType == IIT_OnlyOne)
+	{
+		for (auto Slot : Slots)
+		{
+			for (auto Instance : Slot.StackedInstances)
+			{
+				if (Instance && Instance->GetItemDef() == ItemDef)
+				{
+					return Instance;
+				}
+			}
+		}
+	}
+	// Add new instance and initialize and return.
+	auto NewItemInstance = NewObject<UInventoryItemInstance>(OwnerComponent->GetOwner(),
+		ItemDef->DefaultItemInstance.GetClass(),
+		NAME_None, RF_NoFlags, ItemDef->DefaultItemInstance);
+	NewItemInstance->SetItemDef(ItemDef);
+	NewItemInstance->OnInstanceCreated();
+	return NewItemInstance;
+}
+
+int FInventoryList::FindCategoryLastItemIndex(const FGameplayTag SlotCategoryTag) const
+{
+	// Reverse for loop find last category last item
+	for (int32 i = Slots.Num() - 1; i >= 0; --i)
+	{
+		if (Slots[i].SlotCategoryTag.MatchesTag(SlotCategoryTag))
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+void FInventoryList::AddEmptySlots(const int& EmptySlotsAmount, const FGameplayTag& SlotCategoryTag)
+{
+	// If find category, will add and return
+	auto CategoryFindLast = FindCategoryLastItemIndex(SlotCategoryTag);
+	if (CategoryFindLast >= 0)
+	{
+		for (int Idx = 0; Idx < EmptySlotsAmount; ++Idx)
+		{
+			Slots.Insert(FInventorySlot(SlotCategoryTag), CategoryFindLast + 1 + Idx);
+			MarkItemDirty(Slots[CategoryFindLast + 1 + Idx]);
+			NotifyComponentListChanged(Slots[CategoryFindLast + 1 + Idx], CategoryFindLast + 1 + Idx, ChangeType_Added);
+		}
+		return;
+	}
+	
+	for (int Idx = 0; Idx < EmptySlotsAmount; ++Idx)
+	{
+		auto NewSlot = Slots.Add(FInventorySlot(SlotCategoryTag));
+		MarkItemDirty(Slots[NewSlot]);
+		NotifyComponentListChanged(Slots[NewSlot], NewSlot, ChangeType_Added);
+	}
+}
+
+void FInventoryList::AddEmptySlots(const TMap<FGameplayTag, int>& InitMap)
+{
+	for (auto Pair : InitMap)
+	{
+		for (int32 Idx = 0; Idx < Pair.Value; ++Idx)
+		{
+			auto NewSlot = Slots.Add(FInventorySlot(Pair.Key));
+			MarkItemDirty(Slots[NewSlot]);
+			NotifyComponentListChanged(Slots[NewSlot], NewSlot, ChangeType_Added);
+		}
+	}
+}
+
+TArray<int32> FInventoryList::GetSlotsByCategory(const FGameplayTag& CategoryTag, const bool& MatchAll) const
+{
+	TArray<int32> Result;
+	for (int32 Idx = 0; Idx < Slots.Num(); ++Idx)
+	{
+		auto Slot = Slots[Idx];
+		if (MatchAll)
+		{
+			if (Slot.SlotCategoryTag.MatchesTagExact(CategoryTag))
+			{
+				Result.Add(Idx);
+			}
+		}
+		else
+		{
+			if (Slot.SlotCategoryTag.MatchesTag(CategoryTag))
+			{
+				Result.Add(Idx);
+			}
+		}
+	}
+	return Result;
+}
+
+int FInventoryList::FindEmpty(const TArray<FGameplayTag>& SlotCategoryTag) const
+{
+	for (auto Tag : SlotCategoryTag)
+	{
+		auto SlotArray = GetSlotsByCategory(Tag);
+		for (auto Index : SlotArray)
+		{
+			if (Slots[Index].IsSlotEmpty())
+			{
+				return Index;
+			}
+		}
+	}
+	return -1;
+}
+
+int FInventoryList::FindEmptyForItemDef(const UInventoryItemDefinition* ItemDefinition, int& MaxStackInThisSlot) const
+{
+	auto Result = FindEmpty(GetItemDefCategoryArray(ItemDefinition));
+	if (Result >= 0)
+	{
+		MaxStackInThisSlot = ItemDefinition->GetMaxStackAmount(Slots[Result].SlotCategoryTag);
+	}
+	return Result;
+}
+
+void FInventoryList::FindStack(const UInventoryItemDefinition* ItemDef, int& Index, int& RemainAmount) const
 {
 	Index = -1;
 	RemainAmount = -1;
@@ -100,183 +355,229 @@ void FInventoryList::FindStack(const UInventoryItemDefinition* ItemDef, int& Ind
 		return;
 	}
 
-	Index = Slots.IndexOfByPredicate([&ItemDef](const FInventorySlot& InItem)
+	int MaxStackAmount = -1;
+	Index = Slots.IndexOfByPredicate([&ItemDef, &MaxStackAmount](const FInventorySlot& InItem)
 	{
-		if (InItem.GetItemDef() == nullptr)
+		if (!InItem.IsSlotEmpty())
 		{
-			return false;
+			MaxStackAmount = ItemDef->GetMaxStackAmount(InItem.SlotCategoryTag);
+			return InItem.ItemDefinition == ItemDef && InItem.GetItemStackCount() < MaxStackAmount;
 		}
-		return InItem.GetItemDef() == ItemDef && InItem.StackCount < ItemDef->MaxStackAmount;
+		return false;
 	});
 
-	if (Index < 0)
+	if (Index < 0 || MaxStackAmount < 0)
 	{
 		return;
 	}
 	
-	RemainAmount = ItemDef->MaxStackAmount - Slots[Index].StackCount;
+	RemainAmount = MaxStackAmount - Slots[Index].GetItemStackCount();
 }
 
-int FInventoryList::AddItem(UInventoryItemDefinition* ItemDef, int Count, const TArray<FGameplayTagStack>& TagStackOverride)
+void FInventoryList::StackInstances(const UInventoryItemDefinition* ItemDef, TArray<UInventoryItemInstance*>& InArray, const int SlotIndex, const int SplitAmount)
 {
-	if (ItemDef == nullptr)
+	for (int Idx = 0; Idx < SplitAmount; ++Idx)
 	{
-		// Error.
-		return -1;
-	}
+		auto NewInstance = InArray[Idx];
+		if (NewInstance == nullptr)
+		{
+			NewInstance = AddNewItemInstance(ItemDef);
+		}
+		else if (NewInstance->GetOuter() != OwnerComponent->GetOwner())
+		{
+			// Fix outer problem
+			auto NewItemInstance = NewObject<UInventoryItemInstance>(OwnerComponent->GetOwner(),
+				ItemDef->DefaultItemInstance.GetClass(),
+				NAME_None, RF_NoFlags, NewInstance);
+			NewItemInstance->SetItemDef(ItemDef);
+			NewItemInstance->OnInstanceCreated();
 
-	auto OldCount = Count;
+			NewInstance->OnInstanceDestroyed();
+			
+			NewInstance = NewItemInstance;
+		}
+		Slots[SlotIndex].StackedInstances.Emplace(NewInstance);
+		InArray[Idx]->OnCategoryChanged(Slots[SlotIndex].SlotCategoryTag);
+		InArray.RemoveAt(Idx, EAllowShrinking::No);
+	}
+	InArray.Shrink();
+}
+
+int FInventoryList::AddItem(const UInventoryItemDefinition* ItemDef, int Count)
+{
+	TArray<UInventoryItemInstance*> InArray;
+	InArray.SetNum(Count);
+	return AddItem(ItemDef, InArray);
+}
+
+void NotifyCategoryChanged(const FInventorySlot& Slot)
+{
+	for (const auto Itr : Slot.StackedInstances)
+	{
+		if (Itr == nullptr)
+		{
+			continue;
+		}
+		Itr->OnCategoryChanged(Slot.SlotCategoryTag);
+	}
+}
+
+int FInventoryList::AddItem(const UInventoryItemDefinition* InItemDef, TArray<UInventoryItemInstance*> Instances)
+{
+	if (!Instances.IsValidIndex(0) || InItemDef == nullptr)
+	{
+		return Instances.Num();
+	}
 	
 	// First find stack.
 	int FindStackRemainAmount;
 	int FindStackIndex;
-	FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
+	FindStack(InItemDef, FindStackIndex, FindStackRemainAmount);
 
 	// Loop find stack.
-	while (FindStackIndex >= 0 && Count > 0)
+	while (FindStackIndex >= 0 && Instances.Num() > 0)
 	{
-		FindStack(ItemDef, FindStackIndex, FindStackRemainAmount);
-		if (FindStackRemainAmount >= Count)
+		auto Bool = FindStackRemainAmount >= Instances.Num();
+		auto Amount = Bool ? Instances.Num() : FindStackRemainAmount;
+		if (InItemDef->ItemInstanceType == IIT_Multiple)
 		{
-			Slots[FindStackIndex].StackCount += Count;
-			MarkItemDirty(Slots[FindStackIndex]);
-			Count = 0;
+			StackInstances(InItemDef, Instances, FindStackIndex, Amount);
 		}
-		else if (FindStackIndex >= 0)
+		else
 		{
-			Slots[FindStackIndex].StackCount += FindStackRemainAmount;
-			MarkItemDirty(Slots[FindStackIndex]);
-			Count -= FindStackRemainAmount;
+			SetItemStackCountAt(FindStackIndex, Slots[FindStackIndex].GetItemStackCount() + Amount);
+			Instances.SetNum(Instances.Num() - Amount);
 		}
+		MarkItemDirty(Slots[FindStackIndex]);
+		if (Bool)
+		{
+			NotifyComponentListChanged(Slots[FindStackIndex], FindStackIndex, ChangeType_Changed);
+			return 0;
+		}
+		FindStack(InItemDef, FindStackIndex, FindStackRemainAmount);
 	}
-	
-	// Finish find stack.
-	if (Count <= 0)
-	{
-		Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
-		return 0;
-	}
-	
+
 	// Begin find empty.
-	// Const max stack amount.
-	const int maxStack = ItemDef->MaxStackAmount;
-	// First find empty.
-	int FindEmptyIndex = FindEmpty();
-			
+	int FindEmptySlotMaxStackAmount = -1;
+	int FindEmptyIndex = FindEmptyForItemDef(InItemDef, FindEmptySlotMaxStackAmount);
 	// Loop find empty.
-	while (FindEmptyIndex >= 0 && Count > 0)
+	while (FindEmptyIndex >= 0 && Instances.Num() > 0)
 	{
-		FInventorySlot Slot = AddNewInstance(ItemDef, (Count >= maxStack) ? maxStack : Count);
-
-		Slots[FindEmptyIndex] = Slot;
-		MarkItemDirty(Slot);
-		Count -= (Count >= maxStack) ? maxStack : Count;
-		
-		if (TagStackOverride.Num() > 0)
+		auto Bool = FindEmptySlotMaxStackAmount >= Instances.Num();
+		auto Amount = Bool ? Instances.Num() : FindEmptySlotMaxStackAmount;
+		Slots[FindEmptyIndex].ItemDefinition = const_cast<UInventoryItemDefinition*>(InItemDef);
+		Slots[FindEmptyIndex].StackAmount = Amount;
+		if (InItemDef->ItemInstanceType == IIT_Multiple)
 		{
-			if (const auto instance = Cast<UInventoryItemInstance_StatTags>(Slot.Instance))
+			// If pick up item actor, these instances will be nullptr!!!
+			// So we should fix it through these codes.
+			for (int32 Idx = 0; Idx < Instances.Num(); ++Idx)
 			{
-				instance->SetStatTagStacks(TagStackOverride);
-			}
-		}
-
-		FindEmptyIndex = FindEmpty();
-	}
-	
-	if (Count != OldCount)
-	{
-		Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
-	}
-	return Count;
-}
-
-void FInventoryList::SetItemAt(UInventoryItemDefinition* ItemDef, const int Count,
-	const TArray<FGameplayTagStack>& TagStackOverride, const int& Index)
-{
-	if (!Slots.IsValidIndex(Index))
-	{
-		return;
-	}
-	
-	RemoveItemAt(Index, Slots[Index].StackCount);
-	const FInventorySlot Slot = AddNewInstance(ItemDef, Count);
-	if (TagStackOverride.Num() > 0)
-	{
-		if (const auto instance = Cast<UInventoryItemInstance_StatTags>(Slot.Instance))
-		{
-			instance->SetStatTagStacks(TagStackOverride);
-		}
-	}
-	Slots[Index] = Slot;
-	MarkItemDirty(Slots[Index]);
-	Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
-}
-
-FInventorySlot FInventoryList::AddNewInstance(UInventoryItemDefinition* ItemDef, const int StackAmount) const
-{
-	FInventorySlot Slot;
-	Slot.StackCount = StackAmount;
-
-	//check instance bp type is valid
-	if (auto InstanceInDef = DuplicateObject(ItemDef->ItemInstance, OwnerComponent->GetOwner()))
-	{
-		Slot.Instance = InstanceInDef;
-		// Trigger instance created event, can override by child class.
-		Slot.ItemDefinition = ItemDef;
-		Slot.Instance->SetItemDef(ItemDef);
-		
-		for (const UInventoryItemFragment* Fragment : ItemDef->Fragments)
-		{
-			if (Fragment != nullptr)
-			{
-				Fragment->OnInstanceCreated(Slot.Instance);
-			}
-		}
-		Slot.Instance->OnInstanceCreated();
-	}
-	else
-	{
-		Slot.ItemDefinition = ItemDef;
-	}
-	
-	return Slot;
-}
-
-void FInventoryList::RemoveItemAt(const int Index, const int Amount)
-{
-	if (Slots.Num() <= Index || Amount == 0)
-	{
-		return;
-	}
-
-	if (const int Count = FMath::Max(Slots[Index].StackCount - Amount, 0); Count > 0)
-	{
-		Slots[Index].StackCount = Count;
-	}
-	else
-	{
-		if (OwnerComponent)
-		{
-			if (UInventoryManagerComponent* IMC = Cast<UInventoryManagerComponent>(OwnerComponent))
-			{
-				if (Index == IMC->SelectedQuickBarIndex)
+				if (Instances[Idx] == nullptr)
 				{
-					IMC->UnequipInstance();
+					Instances[Idx] = AddNewItemInstance(InItemDef);
 				}
 			}
+			StackInstances(InItemDef, Instances, FindEmptyIndex, Amount);
 		}
-		
-		if (Slots[Index].Instance)
+		else
 		{
-			Slots[Index].Instance->OnInstanceDestroyed();
-			Slots[Index].Instance->ConditionalBeginDestroy();
+			Slots[FindEmptyIndex].StackedInstances.Emplace(AddNewItemInstance(InItemDef));
+			Instances.SetNum(Instances.Num() - Amount);
+			NotifyCategoryChanged(Slots[FindEmptyIndex]);
 		}
-		
-		const FInventorySlot EmptySlot;
-		Slots[Index] = EmptySlot;
+		MarkItemDirty(Slots[FindEmptyIndex]);
+		if (Bool)
+		{
+			NotifyComponentListChanged(Slots[FindEmptyIndex], FindEmptyIndex, ChangeType_Changed);
+			return 0;
+		}
+		FindEmptyIndex = FindEmptyForItemDef(InItemDef, FindEmptySlotMaxStackAmount);
 	}
-	MarkItemDirty(Slots[Index]);
-	Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
+	
+	return Instances.Num();
+}
+
+TArray<FGameplayTag> FInventoryList::GetItemDefCategoryArray(const UInventoryItemDefinition* ItemDef)
+{
+	if (ItemDef)
+	{
+		TArray<FGameplayTag> Result;
+		ItemDef->MaxStackAmountPerCategory.GetKeys(Result);
+		return Result;
+	}
+	return {FGameplayTag::EmptyTag};
+}
+
+bool FInventoryList::SetItemAt(UInventoryItemDefinition* ItemDef, int Count, const int& Index, bool bForceSet)
+{
+	if (!Slots.IsValidIndex(Index) || ItemDef == nullptr)
+	{
+		return false;
+	}
+
+	if (!bForceSet)
+	{
+		auto IdArray = GetItemDefCategoryArray(ItemDef);
+		if (!IdArray.Find(Slots[Index].SlotCategoryTag))
+		{
+			return false;
+		}
+	}
+
+	// Empty slot and set item
+	for (auto InstanceItr : Slots[Index].StackedInstances)
+	{
+		InstanceItr->OnInstanceDestroyed();
+	}
+	Slots[Index].StackedInstances.Empty();
+	Slots[Index].ItemDefinition = nullptr;
+	Slots[Index].StackAmount = 0;
+	
+	Slots[Index].ItemDefinition = ItemDef;
+	SetItemStackCountAt(Index, Count);
+	return true;
+}
+
+// Deprecated
+void FInventoryList::AddNewInstance(FInventorySlot& Slot, const UInventoryItemDefinition* ItemDef, int StackAmount) const
+{
+	if (ItemDef == nullptr || StackAmount <= 0)
+	{
+		return;
+	}
+	if (!Slot.IsSlotEmpty())
+	{
+		// Destroy all instances and empty the slot.
+		for (auto InstanceItr : Slot.StackedInstances)
+		{
+			InstanceItr->OnInstanceDestroyed();
+		}
+		Slot.StackedInstances.Empty();
+		Slot.ItemDefinition = nullptr;
+		Slot.StackAmount = 0;
+	}
+	
+	int MaxStackAmount = ItemDef->GetMaxStackAmount(Slot.SlotCategoryTag);
+	StackAmount = FMath::Clamp(StackAmount, 1, MaxStackAmount);
+	Slot.ItemDefinition = const_cast<UInventoryItemDefinition*>(ItemDef);
+	Slot.StackAmount = StackAmount;
+
+	switch (ItemDef->ItemInstanceType)
+	{
+	case IIT_None:
+		break;
+	case IIT_OnlyOne:
+		Slot.StackedInstances.Emplace(AddNewItemInstance(ItemDef));
+		break;
+	case IIT_Multiple:
+		for (int Idx = 0; Idx < StackAmount; ++Idx)
+		{
+			Slot.StackedInstances.Emplace(AddNewItemInstance(ItemDef));
+		}
+		break;
+	default: ;
+	}
 }
 
 bool FInventoryList::ItemDefUsed(const UInventoryItemDefinition* ItemDef, int Amount)
@@ -288,22 +589,22 @@ bool FInventoryList::ItemDefUsed(const UInventoryItemDefinition* ItemDef, int Am
 	
 	for (int ID = 0; ID < Slots.Num(); ID++)
 	{
-		auto Slot = Slots[ID];
-		if (!Slot.GetItemDef())
+		auto& Slot = Slots[ID];
+		if (!Slot.ItemDefinition)
 		{
 			continue;
 		}
 		
-		if (Slot.GetItemDef() == ItemDef && Amount != 0)
+		if (Slot.ItemDefinition == ItemDef && Amount != 0)
 		{
-			if (Amount > Slot.StackCount)
+			if (Amount > Slot.GetItemStackCount())
 			{
-				RemoveItemAt(ID, Slot.StackCount);
-				Amount -= Slot.StackCount;
+				EmptySlotAt(ID);
+				Amount -= Slot.GetItemStackCount();
 			}
 			else
 			{
-				RemoveItemAt(ID,Amount);
+				SetItemStackCountAt(ID, Slot.GetItemStackCount() - Amount);
 				return true;
 			}
 		}
@@ -323,56 +624,96 @@ void FInventoryList::DragDropItem(const int DragIndex, const int DropIndex)
 	{
 		return;
 	}
-	
-	if (Slots[DragIndex].GetItemDef() != nullptr
-		&& Slots[DropIndex].GetItemDef() != nullptr
-		&& Slots[DragIndex].GetItemDef() == Slots[DropIndex].GetItemDef())
+
+	// Stack on drop slot
+	if (Slots[DragIndex].ItemDefinition == Slots[DropIndex].ItemDefinition)
 	{
-		//Stack
-		const int maxStackAmount = Slots[DragIndex].GetItemDef()->MaxStackAmount;
-		const int finalAmount = Slots[DropIndex].StackCount + Slots[DragIndex].StackCount;
-		const int calculateAmount = finalAmount - maxStackAmount;
-		if (Slots[DropIndex].StackCount != maxStackAmount)
+		const int MaxStackAmount = Slots[DropIndex].ItemDefinition->GetMaxStackAmount(Slots[DropIndex].SlotCategoryTag);
+		const int FinalAmount = Slots[DropIndex].GetItemStackCount() + Slots[DragIndex].GetItemStackCount();
+		const int CalculateAmount = FinalAmount - MaxStackAmount;
+		// If not max stack
+		if (Slots[DropIndex].GetItemStackCount() != MaxStackAmount)
 		{
-			if (calculateAmount > 0)
+			if (Slots[DropIndex].ItemDefinition->ItemInstanceType == IIT_Multiple)
 			{
-				Slots[DropIndex].StackCount = maxStackAmount;
-				Slots[DragIndex].StackCount = calculateAmount;
+				StackInstances(Slots[DropIndex].ItemDefinition, Slots[DragIndex].StackedInstances, DropIndex,
+							   CalculateAmount > 0
+								   ? MaxStackAmount - Slots[DropIndex].GetItemStackCount()
+								   : Slots[DragIndex].GetItemStackCount());
 			}
 			else
 			{
-				Slots[DropIndex].StackCount = finalAmount;
-				RemoveItemAt(DragIndex, Slots[DragIndex].StackCount);
+				SetItemStackCountAt(DropIndex, CalculateAmount > 0 ? MaxStackAmount : FinalAmount);
+				SetItemStackCountAt(DragIndex, CalculateAmount > 0 ? CalculateAmount : 0);
 			}
-			//Rep net
+			
 			MarkItemDirty(Slots[DropIndex]);
 			MarkItemDirty(Slots[DragIndex]);
-			Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
+			NotifyComponentListChanged(Slots[DropIndex], DropIndex, ChangeType_Changed);
+			NotifyComponentListChanged(Slots[DragIndex], DragIndex, ChangeType_Changed);
 			return;
 		}
 	}
-	
-	//Switch
-	const FInventorySlot Slot = Slots[DropIndex];
-	Slots[DropIndex] = Slots[DragIndex];
-	Slots[DragIndex] = Slot;
-	
-	//Rep net
-	MarkItemDirty(Slots[DropIndex]);
-	MarkItemDirty(Slots[DragIndex]);
-	Cast<UInventoryManagerComponent>(OwnerComponent)->K2_InventoryListChanged();
+	else
+	{
+		auto MaxStack = Slots[DragIndex].ItemDefinition->GetMaxStackAmount(Slots[DropIndex].SlotCategoryTag);
+		// Drag to empty with little part start
+		if (MaxStack < Slots[DragIndex].GetItemStackCount())
+		{
+			Slots[DropIndex].ItemDefinition = Slots[DragIndex].ItemDefinition;
+			Slots[DragIndex].StackAmount -= MaxStack;
+			switch (Slots[DragIndex].ItemDefinition->ItemInstanceType)
+			{
+			case IIT_None:
+				Slots[DropIndex].StackAmount = MaxStack;
+				break;
+			case IIT_OnlyOne:
+				SetItemStackCountAt(DropIndex, MaxStack);
+				break;
+			case IIT_Multiple:
+				StackInstances(Slots[DragIndex].ItemDefinition, Slots[DragIndex].StackedInstances, DropIndex, MaxStack);
+				break;
+			default: ;
+			}
+			MarkItemDirty(Slots[DropIndex]);
+			MarkItemDirty(Slots[DragIndex]);
+			NotifyComponentListChanged(Slots[DropIndex], DropIndex, ChangeType_Changed);
+			NotifyComponentListChanged(Slots[DragIndex], DragIndex, ChangeType_Changed);
+			NotifyCategoryChanged(Slots[DropIndex]);
+			NotifyCategoryChanged(Slots[DragIndex]);
+			return;
+			//UE_LOG(LogInventory, Warning, TEXT("Can't fit this slot, can only drop part of items to this slot"))
+		}
+		else if (Slots[DropIndex].ItemDefinition == nullptr ||
+				Slots[DropIndex].ItemDefinition->GetMaxStackAmount(Slots[DragIndex].SlotCategoryTag) >= Slots[DropIndex].GetItemStackCount())
+		{
+			{
+				// Switch start
+				Slots[DropIndex].SwitchSlot(Slots[DragIndex]);
+				//Rep net
+				MarkItemDirty(Slots[DropIndex]);
+				MarkItemDirty(Slots[DragIndex]);
+				NotifyComponentListChanged(Slots[DropIndex], DropIndex, ChangeType_Changed);
+				NotifyComponentListChanged(Slots[DragIndex], DragIndex, ChangeType_Changed);
+				NotifyCategoryChanged(Slots[DropIndex]);
+				NotifyCategoryChanged(Slots[DragIndex]);
+				return;
+				// Switch end
+			}
+		}
+	}
 }
 
-int FInventoryList::GetTotalItemAmount(const UInventoryItemDefinition* ItemDef)
+int FInventoryList::GetTotalItemAmount(const UInventoryItemDefinition* ItemDef) const
 {
 	if (ItemDef != nullptr)
 	{
 		int LocalTotalAmount = 0;
 		for (FInventorySlot Slot : Slots)
 		{
-			if (ItemDef == Slot.GetItemDef())
+			if (ItemDef == Slot.ItemDefinition)
 			{
-				LocalTotalAmount += Slot.StackCount;
+				LocalTotalAmount += Slot.GetItemStackCount();
 			}
 		}
 		return LocalTotalAmount;
@@ -387,6 +728,10 @@ UInventoryManagerComponent::UInventoryManagerComponent(const FObjectInitializer&
 	bAllowAnyoneToDestroyMe = true;
 	PrimaryComponentTick.bCanEverTick = true;
 	SetIsReplicatedByDefault(true);
+	if (auto InventorySetting = GetMutableDefault<UInventorySettings>())
+	{
+		InventorySlotAmount = {TPair<FGameplayTag, int>(InventorySetting->DefaultCategoryTag, 10)};
+	}
 }
 
 void UInventoryManagerComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -394,7 +739,6 @@ void UInventoryManagerComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProp
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ThisClass, InventoryList);
-	DOREPLIFETIME(ThisClass, SelectedQuickBarIndex);
 	DOREPLIFETIME(ThisClass, KnownRecipes);
 	DOREPLIFETIME(ThisClass, bForceUnequipped);
 }
@@ -408,13 +752,12 @@ void UInventoryManagerComponent::BeginPlay()
 
 	if (GetOwner()->HasAuthority())
 	{
-		InventoryList.Slots.Empty();
 		InventoryList.AddEmptySlots(InventorySlotAmount);
 	}
 	
 	if (bUseSphereDetection)
 	{
-		//加入检测球体碰撞
+		// All sphere collision to detect item actors.
 		SphereComp = Cast<USphereComponent>(GetOwner()->AddComponentByClass(USphereComponent::StaticClass(), true, GetOwner()->GetTransform(), false));
 		SphereComp->AttachToComponent(GetOwner()->GetRootComponent(), FAttachmentTransformRules::SnapToTargetIncludingScale);
 		SphereComp->bHiddenInGame = !bDebugDraw;
@@ -515,40 +858,31 @@ void UInventoryManagerComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 {
 	Super::EndPlay(EndPlayReason);
 
-	if (EquippedInstance)
+	for (auto Slot : InventoryList.Slots)
 	{
-		EquippedInstance->OnInstanceDestroyed();
-		EquippedInstance->ConditionalBeginDestroy();
+		for (auto Instance : Slot.StackedInstances)
+		{
+			if (Instance)
+			{
+				Instance->OnInstanceDestroyed();
+			}
+		}
 	}
 	
 	InventoryList.Slots.Empty();
 	InventoryList.MarkArrayDirty();
 }
 
-void UInventoryManagerComponent::OnRep_SelectedQuickBarIndex()
+void UInventoryManagerComponent::AddEmptySlots(const FGameplayTag& SlotCategoryTag, int Count)
 {
-	UnequipInstance();
-	EquipInstance(SelectedQuickBarIndex);
+	InventoryList.AddEmptySlots(Count, SlotCategoryTag);
 }
 
-void UInventoryManagerComponent::OnRep_List()
+int UInventoryManagerComponent::AddItem(UInventoryItemDefinition* ItemDef, const int Count)
 {
-	if (InventoryList.Slots.IsValidIndex(SelectedQuickBarIndex))
+	if (ItemDef != nullptr && Count > 0)
 	{
-		if (EquippedInstance != InventoryList.Slots[SelectedQuickBarIndex].Instance)
-		{
-			OnRep_SelectedQuickBarIndex();
-		}
-	}
-}
-
-int UInventoryManagerComponent::AddItem(const TArray<FGameplayTagStack> TagStackOverride, UInventoryItemDefinition* ItemDef, const int Count)
-{
-	if (ItemDef != nullptr)
-	{
-		const TArray<FGameplayTagStack> EmptyTagStack;
-		const int Return = InventoryList.AddItem(ItemDef, Count, (TagStackOverride.Num() >= 0) ? TagStackOverride : EmptyTagStack);
-		OnRep_List();
+		const int Return = InventoryList.AddItem(ItemDef, Count);
 		return Return;
 	}
 	return -1;
@@ -604,8 +938,7 @@ void UInventoryManagerComponent::CraftItem_Implementation(const UInventoryItemRe
     	}
     	for (auto Pair : Out.Array())
     	{
-    		const TArray<FGameplayTagStack> TagStackOverride;
-    		InventoryList.AddItem(Pair.Key, Pair.Value * Times, TagStackOverride);
+    		InventoryList.AddItem(Pair.Key, Pair.Value * Times);
     	}
     }
 }
@@ -615,9 +948,9 @@ int UInventoryManagerComponent::ItemTotalAmount(const UInventoryItemDefinition* 
 	return InventoryList.GetTotalItemAmount(ItemDef);
 }
 
-int UInventoryManagerComponent::FindEmpty()
+int UInventoryManagerComponent::FindEmpty(const TArray<FGameplayTag>& CategoryTags) const
 {
-	return InventoryList.FindEmpty();
+	return InventoryList.FindEmpty(CategoryTags);
 }
 
 bool UInventoryManagerComponent::CheckInventoryExchange(TMap<UInventoryItemDefinition*, int> OutItems,
@@ -636,8 +969,7 @@ bool UInventoryManagerComponent::CheckInventoryExchange(TMap<UInventoryItemDefin
 
 	for (const TPair<UInventoryItemDefinition*, int>& Pair : InItems)
 	{
-		const TArray<FGameplayTagStack> TagStackOverride;
-		if (List.AddItem(Pair.Key, Pair.Value * InTimes, TagStackOverride) != 0)
+		if (List.AddItem(Pair.Key, Pair.Value * InTimes) != 0)
 		{
 			return false;
 		}
@@ -649,16 +981,20 @@ bool UInventoryManagerComponent::CheckInventoryExchange(TMap<UInventoryItemDefin
 void UInventoryManagerComponent::SplitItem_Implementation(const int Index, const int Amount)
 {
 	check(InventoryList.Slots.IsValidIndex(Index))
-
-	if (const int EmptyIndex = InventoryList.FindEmpty(); EmptyIndex >= 0)
+	if (InventoryList.Slots[Index].ItemDefinition == nullptr)
 	{
-		TArray<FGameplayTagStack> StackTags;
-		//if (Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[Index].Instance))
-		//{
-		//	StackTags = Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[Index].Instance)->GetStatTags();
-		//}
-		InventoryList.SetItemAt(InventoryList.Slots[Index].GetItemDef(), Amount, StackTags, EmptyIndex);
-		InventoryList.RemoveItemAt(Index, Amount);
+		return;
+	}
+	
+	int MaxStack;
+	if (const int EmptyIndex = InventoryList.FindEmptyForItemDef(InventoryList.Slots[Index].ItemDefinition, MaxStack); EmptyIndex >= 0)
+	{
+		// Only not multiple right now, TODO : Do it later
+		if (InventoryList.Slots[Index].ItemDefinition->ItemInstanceType != IIT_Multiple)
+		{
+			InventoryList.SetItemAt(InventoryList.Slots[Index].ItemDefinition, Amount, EmptyIndex);
+			InventoryList.SetItemStackCountAt(Index, InventoryList.Slots[Index].GetItemStackCount() - Amount);
+		}
 	}
 }
 
@@ -697,15 +1033,9 @@ void UInventoryManagerComponent::DropItem_Implementation(const int Index, const 
 {
 	if (InventoryList.Slots.IsValidIndex(Index))
 	{
-		if (FVector DropLocation; DropItemCheck(InventoryList.Slots[Index].GetItemDef(),DropLocation))
+		if (FVector DropLocation; DropItemCheck(InventoryList.Slots[Index].ItemDefinition,DropLocation))
 		{
-			const auto Instance = InventoryList.Slots[Index].Instance;
-			FGameplayTagStackContainer TagContainer;
-			if (const auto StatTagsInstance = Cast<UInventoryItemInstance_StatTags>(Instance))
-			{
-				TagContainer = StatTagsInstance->GetStatTagsContainer();
-			}
-			CreateItemActorInFront(InventoryList.Slots[Index].GetItemDef(), Amount, TagContainer, DropLocation);
+			CreateItemActorInFront(InventoryList.Slots[Index], DropLocation);
 			RemoveItem(Index, Amount);
 		}
 		else
@@ -717,21 +1047,54 @@ void UInventoryManagerComponent::DropItem_Implementation(const int Index, const 
 
 void UInventoryManagerComponent::PickUpItem_Implementation(AItemActor_Base* ItemActor)
 {
-	if (ItemActor != nullptr)
+	// Validate
+	if (ItemActor == nullptr)
 	{
-		const int RemainItemAmount = InventoryList.AddItem(ItemActor->ItemID, ItemActor->Amount, ItemActor->OverrideTagStack);
-		ItemActor->Amount = RemainItemAmount;
+		return;
+	}
+	if (ItemActor->ItemID == nullptr || ItemActor->Amount <= 0)
+	{
+		UE_LOG(LogInventory, Error, TEXT("It should not happen! Please check the item actor you picked up! The item actor is %s"), *ItemActor->GetName())
+		return;
+	}
+	
+	// Add items
+	bool bChanged = false;
+	if (ItemActor->ItemID->ItemInstanceType == IIT_Multiple && !ItemActor->bUseDefaultInstance)
+	{
+		int RemainItemAmount = InventoryList.AddItem(ItemActor->ItemID, ItemActor->ItemInstances);
+		ItemActor->ItemInstances.RemoveAt(0, ItemActor->ItemInstances.Num() - RemainItemAmount);
+		if (ItemActor->Amount != ItemActor->ItemInstances.Num())
+		{
+			ItemActor->Amount = ItemActor->ItemInstances.Num();
+			bChanged = true;
+		}
+	}
+	else
+	{
+		int RemainItemAmount = InventoryList.AddItem(ItemActor->ItemID, ItemActor->Amount);
+		if (ItemActor->Amount != RemainItemAmount)
+		{
+			ItemActor->Amount = RemainItemAmount;
+			bChanged = true;
+		}
+	}
+	// If changed then update something.
+	if (bChanged)
+	{
 		ItemActor->NativeOnItemPickedUp();
-		OnRep_List();
 	}
 }
 
 void UInventoryManagerComponent::RemoveItem_Implementation(const int Index, const int Amount)
 {
-	InventoryList.RemoveItemAt(Index, Amount);
+	if (InventoryList.Slots.IsValidIndex(Index))
+	{
+		InventoryList.SetItemStackCountAt(Index, InventoryList.Slots[Index].GetItemStackCount() - Amount);
+	}
 }
 
-void UInventoryManagerComponent::CreateItemActorInFront_Implementation(const UInventoryItemDefinition* ItemDef, int Count, FGameplayTagStackContainer TagStackContainer, FVector DropLocation)
+void UInventoryManagerComponent::CreateItemActorInFront_Implementation(const FInventorySlot SlotToDrop, const FVector DropLocation)
 {
 	FActorSpawnParameters SpawnInfo;
 	SpawnInfo.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -748,13 +1111,9 @@ void UInventoryManagerComponent::CreateItemActorInFront_Implementation(const UIn
 	}
 	
 	//Spawn dynamic actor;
-
 	if (AItemActor_Common* NewActor = GetWorld()->SpawnActorDeferred<AItemActor_Common>(Class, ActorTransform))
 	{
-		NewActor->ItemID = const_cast<UInventoryItemDefinition*>(ItemDef);
-		NewActor->Amount = Count;
-		NewActor->OverrideTagStack = TagStackContainer.GetTagStacks();
-		
+		NewActor->SetupActor(SlotToDrop);
 		NewActor->FinishSpawning(ActorTransform);
 	}
 }
@@ -768,80 +1127,17 @@ void UInventoryManagerComponent::PickupSelectedIdChange(const bool bUpOrDown)
 	}
 }
 
-void UInventoryManagerComponent::DragItemToContainer_Implementation(UInventoryContainerComponent* Container,
-                                                                    const int DragIndex, const int DropIndex)
+TArray<int32> UInventoryManagerComponent::GetSlotsByCategory(const FGameplayTag CategoryTag, const bool MatchAll) const
 {
-	if (!Container)
-	{
-		return;
-	}
-	
-	//check valid ptr
-	if (!InventoryList.Slots.IsValidIndex(DragIndex) || !Container->List.Slots.IsValidIndex(DropIndex))
-	{
-		return;
-	}
-	
-	if (InventoryList.Slots[DragIndex].GetItemDef() != nullptr
-		&& Container->List.Slots[DropIndex].ItemID != nullptr
-		&& InventoryList.Slots[DragIndex].GetItemDef() == Container->List.Slots[DropIndex].ItemID)
-	{
-		//Stack
-		const int MaxStackAmount = InventoryList.Slots[DragIndex].GetItemDef()->MaxStackAmount;
-		const int FinalAmount = Container->List.Slots[DropIndex].StackCount + InventoryList.Slots[DragIndex].StackCount;
-		const int CalculateAmount = FinalAmount - MaxStackAmount;
-		if (Container->List.Slots[DropIndex].StackCount != MaxStackAmount)
-		{
-			if (CalculateAmount > 0)
-			{
-				Container->List.Slots[DropIndex].StackCount = MaxStackAmount;
-				InventoryList.Slots[DragIndex].StackCount = CalculateAmount;
-			}
-			else
-			{
-				Container->List.Slots[DropIndex].StackCount = FinalAmount;
-				RemoveItem(DragIndex, InventoryList.Slots[DragIndex].StackCount);
-			}
-			//Rep net
-			Container->List.MarkItemDirty(Container->List.Slots[DropIndex]);
-			InventoryList.MarkItemDirty(InventoryList.Slots[DragIndex]);
-			K2_InventoryListChanged();
-			return;
-		}
-	}
-	
-	//Switch
-	const auto DragItemDef = InventoryList.Slots[DragIndex].GetItemDef();
-	const auto StackCount = InventoryList.Slots[DragIndex].StackCount;
-	const auto Instance = Cast<UInventoryItemInstance_StatTags>(InventoryList.Slots[DragIndex].Instance);
-	const FContainerSlot Slot = Container->List.Slots[DropIndex];
-	FGameplayTagStackContainer TagStacks;
-	if (Instance)
-	{
-		TagStacks = Instance->GetStatTagsContainer();
-	}
-	Container->SetItem(DragItemDef, StackCount, TagStacks, DropIndex);
-	RemoveItem(DragIndex, StackCount);
-	InventoryList.SetItemAt(Slot.ItemID, Slot.StackCount, Slot.StackTagContainer.GetTagStacks(), DragIndex);
+	return InventoryList.GetSlotsByCategory(CategoryTag, MatchAll);
 }
 
 void UInventoryManagerComponent::DragDropItem_Implementation(const int DragIndex, const int DropIndex)
 {
 	InventoryList.DragDropItem(DragIndex, DropIndex);
-
-	OnRep_List();
 }
 
-void UInventoryManagerComponent::ChangeQuickBarIndex_Server_Implementation(const int Index)
-{
-	if (SelectedQuickBarIndex != Index)
-	{
-		SelectedQuickBarIndex = Index;
-		OnRep_SelectedQuickBarIndex();
-	}
-}
-
-void UInventoryManagerComponent::ForceUnequipItem_Implementation()
+void UInventoryManagerComponent::ForceUnequipItem()
 {
 	if (bForceUnequipped == false)
 	{
@@ -856,7 +1152,7 @@ void UInventoryManagerComponent::ForceUnequipItem_Implementation()
 	}
 }
 
-void UInventoryManagerComponent::CancelForceUnequipItem_Implementation()
+void UInventoryManagerComponent::CancelForceUnequipItem()
 {
 	if (bForceUnequipped == true)
 	{
@@ -871,38 +1167,99 @@ void UInventoryManagerComponent::CancelForceUnequipItem_Implementation()
 	}
 }
 
+void UInventoryManagerComponent::ChangeQuickBarIndex(const int& Index)
+{
+	SelectedQuickBarIndex = Index;
+	if (!GetOwner()->HasAuthority())
+	{
+		ChangeQuickBarIndex_Server(Index);
+	}
+}
+
+void UInventoryManagerComponent::ChangeQuickBarIndex_Server_Implementation(const int& Index)
+{
+	SelectedQuickBarIndex = Index;
+}
+
+void UInventoryManagerComponent::ChangeEquipmentItem(const UInventoryItemInstance* Instance)
+{
+	if (EquippedInstance == Instance)
+	{
+		return;
+	}
+	
+	if (GetOwner()->HasAuthority())
+	{
+		ChangeEquipmentItemImplementation(Instance);
+	}
+	else
+	{
+		ChangeEquipmentItemImplementation(Instance);
+		ChangeEquipmentItem_Server(Instance);
+	}
+}
+
+void UInventoryManagerComponent::ChangeEquipmentItem_Server_Implementation(const UInventoryItemInstance* Instance)
+{
+	ChangeEquipmentItemImplementation(Instance);
+}
+
+void UInventoryManagerComponent::ChangeEquipmentItemImplementation(const UInventoryItemInstance* Instance)
+{
+	UnequipInstance();
+	if (Instance)
+	{
+		EquipInstance(const_cast<UInventoryItemInstance*>(Instance));
+	}
+}
+
 void UInventoryManagerComponent::ClearItems()
 {
 	for (int a = 0; a <= InventoryList.Slots.Num() - 1; a = a + 1)
 	{
-		InventoryList.RemoveItemAt(a, InventoryList.Slots[a].StackCount);
+		InventoryList.EmptySlotAt(a);
 	}
 }
 
 FInventorySaveData UInventoryManagerComponent::GetSaveData()
 {
 	FInventorySaveData InventorySaveData;
-	InventorySaveData.SlotsAmount = InventorySlotAmount;
+	for (auto Slot : InventoryList.Slots)
+	{
+		if (auto Value = InventorySaveData.SlotsAmount.Find(Slot.SlotCategoryTag))
+		{
+			InventorySaveData.SlotsAmount.Add(Slot.SlotCategoryTag, *Value + 1);
+		}
+		else
+		{
+			InventorySaveData.SlotsAmount.Add(Slot.SlotCategoryTag, 1);
+		}
+	}
 	InventorySaveData.SelectedQuickBarIndex = SelectedQuickBarIndex;
 	InventorySaveData.bIsValid = true;
 	for (int Idx = 0; Idx < InventoryList.Slots.Num(); Idx++)
 	{
-		if (!InventoryList.Slots[Idx].GetItemDef())
+		if (!InventoryList.Slots[Idx].ItemDefinition)
 		{
 			continue;
 		}
 
-		TArray<uint8> InstanceData;
-		if (auto InstancePtr = InventoryList.Slots[Idx].Instance)
+		TArray<FItemInstanceSaveData> InstancesSaveData;
+		for (auto Itr : InventoryList.Slots[Idx].StackedInstances)
 		{
-			// Save to binary
-			InstancePtr->K2_OnPreSaveGame();
-			FMemoryWriter MemoryWriter(InstanceData, true);
-			FItemInstanceArchive Ar (MemoryWriter);
-			InstancePtr->Serialize(Ar);
+			if (Itr)
+			{
+				TArray<uint8> InstanceData;
+				Itr->K2_OnPreSaveGame();
+				FMemoryWriter MemoryWriter(InstanceData, true);
+				FItemInstanceArchive Ar(MemoryWriter);
+				Itr->Serialize(Ar);
+				auto NewInstanceSaveData = FItemInstanceSaveData(InstanceData);
+				InstancesSaveData.Emplace(NewInstanceSaveData);
+			}
 		}
 		
-		auto NewSlotData = FItemSlotSaveData(InstanceData, InventoryList.Slots[Idx].GetItemDef(), InventoryList.Slots[Idx].StackCount);
+		auto NewSlotData = FItemSlotSaveData(InstancesSaveData, InventoryList.Slots[Idx].ItemDefinition, InventoryList.Slots[Idx].GetItemStackCount());
 		InventorySaveData.SlotDataMap.Add(Idx, NewSlotData);
 	}
 	
@@ -920,27 +1277,33 @@ bool UInventoryManagerComponent::LoadSaveData(FInventorySaveData SaveData)
 	// Set empty slot
 	InventorySlotAmount = SaveData.SlotsAmount;
 	InventoryList.Slots.Empty();
-	InventoryList.AddEmptySlots(InventorySlotAmount);
+	for (auto Itr : SaveData.SlotsAmount)
+	{
+		InventoryList.AddEmptySlots(Itr.Value, Itr.Key);
+	}
 
 	for (auto DataPair : SaveData.SlotDataMap)
 	{
 		InventoryList.Slots[DataPair.Key].ItemDefinition = DataPair.Value.ItemDefinition;
-		InventoryList.Slots[DataPair.Key].StackCount = DataPair.Value.StackCount;
-		if (auto InstanceInDef = DuplicateObject(DataPair.Value.ItemDefinition->ItemInstance, GetOwner()))
+		InventoryList.Slots[DataPair.Key].StackAmount = DataPair.Value.StackCount;
+		TArray<UInventoryItemInstance*> Instances;
+		for (auto ItrData : DataPair.Value.InstancesData)
 		{
-			InventoryList.Slots[DataPair.Key].Instance = InstanceInDef;
-			InstanceInDef->SetItemDef(DataPair.Value.ItemDefinition);
-			// Load instance
-			FMemoryReader MemoryReader(DataPair.Value.Data, true);
-			FItemInstanceArchive Ar(MemoryReader);
-			InstanceInDef->Serialize(Ar);
-			InstanceInDef->K2_OnPostLoadGame();
+			if (auto InstanceInDef = InventoryList.AddNewItemInstance(DataPair.Value.ItemDefinition))
+			{
+				FMemoryReader MemoryReader(ItrData.InstanceData, true);
+				FItemInstanceArchive Ar(MemoryReader);
+				InstanceInDef->Serialize(Ar);
+				InstanceInDef->K2_OnPostLoadGame();
+				Instances.Emplace(InstanceInDef);
+			}
 		}
+		InventoryList.Slots[DataPair.Key].StackedInstances = Instances;
 		InventoryList.MarkItemDirty(InventoryList.Slots[DataPair.Key]);
+		NotifyCategoryChanged(InventoryList.Slots[DataPair.Key]);
 	}
 	
 	SelectedQuickBarIndex = SaveData.SelectedQuickBarIndex;
-	OnRep_SelectedQuickBarIndex();
 	return true;
 }
 
@@ -966,9 +1329,12 @@ bool UInventoryManagerComponent::ReplicateSubobjects(UActorChannel* Channel, FOu
 
 	for (FInventorySlot& Slot : InventoryList.Slots)
 	{
-		if (UInventoryItemInstance* Instance = Slot.Instance; Instance && IsValid(Instance))
+		for (auto Itr : Slot.StackedInstances)
 		{
-			WroteSomething |= Channel->ReplicateSubobject(Instance, *Bunch, *RepFlags);
+			if (Itr && IsValid(Itr))
+			{
+				WroteSomething |= Channel->ReplicateSubobject(Itr, *Bunch, *RepFlags);
+			}
 		}
 	}
 
@@ -983,9 +1349,12 @@ void UInventoryManagerComponent::ReadyForReplication()
 	{
 		for (const FInventorySlot& Slot : InventoryList.Slots)
 		{
-			if (UInventoryItemInstance* Instance = Slot.Instance; IsValid(Instance))
+			for (auto Itr : Slot.StackedInstances)
 			{
-				AddReplicatedSubObject(Instance);
+				if (Itr && IsValid(Itr))
+				{
+					AddReplicatedSubObject(Itr);
+				}
 			}
 		}
 	}
@@ -1000,19 +1369,19 @@ void UInventoryManagerComponent::UnequipInstance()
 			Instance->OnUnequipped();
 			Instance->SetInstigator(nullptr);
 		}
+		EquippedInstance = nullptr;
 	}
-	EquippedInstance = nullptr;
 }
 
-void UInventoryManagerComponent::EquipInstance(int SlotIndex)
+void UInventoryManagerComponent::EquipInstance(UInventoryItemInstance* ItemInstance)
 {
-	if (InventoryList.Slots.IsValidIndex(SlotIndex))
+	if (ItemInstance)
 	{
-		EquippedInstance = InventoryList.Slots[SlotIndex].Instance;
-		if (const auto Instance = Cast<UInventoryItemInstance_Equipment>(EquippedInstance))
+		if (const auto Instance = Cast<UInventoryItemInstance_Equipment>(ItemInstance))
 		{
 			Instance->OnEquipped();
 			Instance->SetInstigator(GetOwner());
 		}
 	}
+	EquippedInstance = ItemInstance;
 }

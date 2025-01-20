@@ -3,36 +3,118 @@
 
 #include "InventoryItemDefinition.h"
 
+#include "InventorySettings.h"
 #include "Fragments/InventoryFragment_SkeletalMesh.h"
 #include "Fragments/InventoryFragment_StaticMesh.h"
-#include "ItemInstances/InventoryItemInstance_StatTags.h"
 
 UInventoryItemDefinition::UInventoryItemDefinition(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	if (auto GlobalSettings = GetMutableDefault<UInventorySettings>())
+	{
+		MaxStackAmountPerCategory.Add(GlobalSettings->DefaultCategoryTag, 1);
+	}
+}
+
+int UInventoryItemDefinition::GetMaxStackAmount(const FGameplayTag CategoryTag) const
+{
+	auto Tag = CategoryTag;
+	if (!Tag.IsValid())
+	{
+		if (auto Settings = GetMutableDefault<UInventorySettings>())
+		{
+			Tag = Settings->DefaultCategoryTag;
+		}
+	}
+
+	for (auto Pair : MaxStackAmountPerCategory)
+	{
+		if (Tag.MatchesTag(Pair.Key))
+		{
+			return Pair.Value;
+		}
+	}
+	
+	return -1;
+}
+
+int UInventoryItemDefinition::GetMaxMaxStackAmount() const
+{
+	TArray<int> MaxStackAmountArray;
+	MaxStackAmountPerCategory.GenerateValueArray(MaxStackAmountArray);
+	int MaxNum = 0;
+	for (auto Itr : MaxStackAmountArray)
+	{
+		MaxNum = FMath::Max(MaxNum, Itr);
+	}
+	return MaxNum;
+}
+
+void UInventoryItemDefinition::SetValidateMessage()
+{
+	FString Result;
+
+	if (ItemID.IsEmpty())
+	{
+		Result += TEXT("x Item ID is empty, it will cause localization problem! \n");
+	}
+
+	if (DisplayName.IsEmpty())
+	{
+		Result += TEXT("x Item display name is empty! \n");
+	}
+
+	if (ItemDescription.IsEmpty())
+	{
+		Result += TEXT("x Item display description text is empty! \n");
+	}
+
+	if (MaxStackAmountPerCategory.IsEmpty())
+	{
+		Result += TEXT("x Item max stack settings is not valid! \n");
+	}
+
+	if (MeshType == MT_None)
+	{
+		Result += TEXT("x Item mesh is not valid! \n");
+	}
+
+	if ((MeshType == MT_StaticMesh && !Cast<UInventoryFragment_StaticMesh>(MeshSettings)) ||
+		(MeshType == MT_SkeletalMesh && !Cast<UInventoryFragment_SkeletalMesh>(MeshSettings)) )
+	{
+		Result += TEXT("x Item mesh is not match, you can change mesh type to fix it! \n");
+	}
+
+	if (Result.IsEmpty())
+	{
+		Result = "* Item is perfect and valid!";
+	}
+	
+	ValidateMessage = Result;
 }
 
 #if WITH_EDITOR
+
+void UInventoryItemDefinition::PostLoad()
+{
+	Super::PostLoad();
+	SetValidateMessage();
+	if (ItemInstanceType == IIT_None)
+	{
+		DefaultItemInstance = nullptr;
+	}
+}
+
 // Localization
 void UInventoryItemDefinition::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
 	UObject::PostEditChangeProperty(PropertyChangedEvent);
-	
+	SetValidateMessage();
 	FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
-	// Clamp max stack amount to 1 if this item is stat tags class or equipment class.
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(UInventoryItemDefinition, ItemInstance) ||
-		PropertyName == GET_MEMBER_NAME_CHECKED(UInventoryItemDefinition, MaxStackAmount))
-	{
-		if (Cast<UInventoryItemInstance_StatTags>(ItemInstance))
-		{
-			Modify();
-			MaxStackAmount = 1;
-		}
-	}
+	Modify();
 	// Auto set mesh fragment
 	if (PropertyName == GET_MEMBER_NAME_CHECKED(UInventoryItemDefinition, MeshType))
 	{
-		Modify();
 		switch (MeshType)
 		{
 		case MT_None:
@@ -67,6 +149,14 @@ void UInventoryItemDefinition::PostEditChangeProperty(FPropertyChangedEvent& Pro
 		ItemDescription = ItemDescription.ChangeKey(TEXT("Inventory"), Desc, ItemDescription);
 #undef LOCTEXT_NAMESPACE
 	}
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(UInventoryItemDefinition, ItemInstanceType))
+	{
+		if (ItemInstanceType == IIT_None)
+		{
+			DefaultItemInstance = nullptr;
+		}
+	}
+	MarkPackageDirty();
 }
 #endif
 

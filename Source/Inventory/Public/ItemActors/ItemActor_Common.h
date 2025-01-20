@@ -14,6 +14,8 @@ class INVENTORY_API AItemActor_Common : public AItemActor_Base
 public:
 	AItemActor_Common();
 
+	void SetupActor(const FInventorySlot& Slot);
+
 	void InitComps(const FTransform& Transform);
 
 	UFUNCTION(BlueprintPure)
@@ -22,15 +24,22 @@ public:
 #if WITH_EDITORONLY_DATA
 	bool bIsSimulatingPhysicsInEditor = false;
 #endif
-	
-	UFUNCTION(CallInEditor)
-	void SimulatePhysics();
-	
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	UStaticMeshComponent* ItemStaticMeshComponent;
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	USkeletalMeshComponent* ItemSkeletalMeshComponent;
+#if WITH_EDITOR
+	// Useful to build a level with item actors.
+	UFUNCTION(CallInEditor, Category = "Inventory|Editor Events")
+	void SimulatePhysics();
+
+	// Useful to refresh mesh when changing the item definition's mesh description.
+	UFUNCTION(CallInEditor, Category = "Inventory|Editor Events")
+	void RefreshMesh();
+#endif
+	
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Inventory", AdvancedDisplay)
+	UStaticMeshComponent* ItemStaticMeshComponent = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Inventory", AdvancedDisplay)
+	USkeletalMeshComponent* ItemSkeletalMeshComponent = nullptr;
 	
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;

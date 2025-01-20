@@ -6,44 +6,33 @@
 #include "GameplayTagsManager.h"
 #include "ItemActors/ItemActor_Common.h"
 
-FQualitySetting::FQualitySetting(const FGameplayTag Tag, const FLinearColor Color, const FText& Name)
-{
-	QualityTag = Tag;
-	QualityColor = Color;
-	QualityName = Name;
-}
-
-FInventoryGameplayTagSetting::FInventoryGameplayTagSetting(const FGameplayTag Tag, const FText& LocName,
-	const FText& LocDesc)
-{
-	OtherGameplayTag = Tag;
-	OtherGameplayTagLocName = LocName;
-	OtherGameplayTagLocDesc = LocDesc;
-}
-
 #define LOCTEXT_NAMESPACE "UInventorySettings"
 
 UInventorySettings::UInventorySettings(const FObjectInitializer& obj)
 {
-	const FQualitySetting Common = MakeQualitySetting(TEXT("InventoryQuality.Common"), FLinearColor::Gray, LOCTEXT("InventoryQualitySettingCommon", "Common"));
-	const FQualitySetting Good = MakeQualitySetting(TEXT("InventoryQuality.Good"), FLinearColor::Gray, LOCTEXT("InventoryQualitySettingGood", "Good"));
-	const FQualitySetting Uncommon = MakeQualitySetting(TEXT("InventoryQuality.Uncommon"), FLinearColor::Gray, LOCTEXT("InventoryQualitySettingUncommon", "Uncommon"));
-	
-	QualitySettings = TArray<FQualitySetting>{Common, Good, Uncommon};
-	CustomDepthStencil = 6;
-}
+	// Quality
+	QualitySettings.Add(MakeGameplayTag("Inventory.Quality.Common"), FQualitySetting(FLinearColor::Green, LOCTEXT("InventoryQualitySettingCommon", "Common")));
+	QualitySettings.Add(MakeGameplayTag("Inventory.Quality.Good"), FQualitySetting(FLinearColor::Blue, LOCTEXT("InventoryQualitySettingGood", "Good")));
+	QualitySettings.Add(MakeGameplayTag("Inventory.Quality.Uncommon"),FQualitySetting(FLinearColor(128,0,128), LOCTEXT("InventoryQualitySettingUncommon", "Uncommon")));
 
-FQualitySetting UInventorySettings::MakeQualitySetting(FName TagName, FLinearColor Color, const FText& Name)
-{
-	UGameplayTagsManager& Manager = UGameplayTagsManager::Get();
-	Manager.AddNativeGameplayTag(TagName);
-	const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(TagName);
-	return FQualitySetting(Tag, Color, Name);
+	CustomDepthStencil = 6;
+	// Default category
+	DefaultCategoryTag = MakeGameplayTag("Inventory.Category.Default");
+	DefaultCategory = FItemCategory(FText::FromString("Default"), FText::FromString("These items are in Default Category"));
+	// Quick bar category
+	ItemCategories.Add(MakeGameplayTag("Inventory.Category.QuickBar"), FItemCategory(FText::FromString("Quick Bar"), FText::FromString("Quick bar category to store items")));
 }
 
 TSubclassOf<AItemActor_Common> UInventorySettings::GetDynamicItemActorClass() const
 {
 	return DynamicItemActorClass.TryLoadClass<AItemActor_Base>();
+}
+
+FGameplayTag UInventorySettings::MakeGameplayTag(const FName TagName)
+{
+	UGameplayTagsManager& Manager = UGameplayTagsManager::Get();
+	Manager.AddNativeGameplayTag(TagName);
+	return FGameplayTag::RequestGameplayTag(TagName);
 }
 
 #undef LOCTEXT_NAMESPACE

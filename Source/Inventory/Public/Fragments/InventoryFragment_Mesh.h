@@ -9,8 +9,8 @@
 /**
  * 
  */
-UCLASS()
-class INVENTORY_API UInventoryFragment_Mesh : public UInventoryItemFragment
+UCLASS(DefaultToInstanced, EditInlineNew, Abstract)
+class INVENTORY_API UInventoryFragment_Mesh : public UObject
 {
 	GENERATED_BODY()
 
