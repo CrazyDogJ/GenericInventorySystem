@@ -82,6 +82,7 @@ void AItemActor_Common::InitComps(const FTransform& Transform)
 					ItemStaticMeshComponent->BodyInstance.bStartAwake = false;
 					ItemStaticMeshComponent->PutAllRigidBodiesToSleep();
 				}
+				OnMeshReady(ItemStaticMeshComponent);
 			}
 			break;
 		}
@@ -121,6 +122,7 @@ void AItemActor_Common::InitComps(const FTransform& Transform)
 					}
 					ItemSkeletalMeshComponent->PutAllRigidBodiesToSleep();
 				}
+				OnMeshReady(ItemSkeletalMeshComponent);
 			}
 			break;
 		}

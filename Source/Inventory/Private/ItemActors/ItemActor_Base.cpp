@@ -46,7 +46,10 @@ void AItemActor_Base::BeginReplication()
 
 	for (auto Itr : ItemInstances)
 	{
-		AddReplicatedSubObject(Itr);
+		if (Itr)
+		{
+			AddReplicatedSubObject(Itr);
+		}
 	}
 }
 

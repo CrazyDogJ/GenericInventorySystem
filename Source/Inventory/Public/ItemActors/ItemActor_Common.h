@@ -33,6 +33,9 @@ public:
 	// Useful to refresh mesh when changing the item definition's mesh description.
 	UFUNCTION(CallInEditor, Category = "Inventory|Editor Events")
 	void RefreshMesh();
+	
+	UFUNCTION(BlueprintImplementableEvent)
+	void OnMeshReady(UPrimitiveComponent* MeshComp);
 #endif
 	
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Inventory", AdvancedDisplay)
