@@ -35,6 +35,9 @@ public:
 	UFUNCTION(BlueprintImplementableEvent)
 	void OnItemPickedUp();
 
+	UFUNCTION(BlueprintImplementableEvent)
+	void OnMeshReady(UPrimitiveComponent* MeshComp);
+	
 	// Need to implement for individual usage.
 	virtual void NativeOnItemPickedUp() {OnItemPickedUp();}
 	virtual bool ReplicateSubobjects(class UActorChannel* Channel, class FOutBunch* Bunch, FReplicationFlags* RepFlags) override;

@@ -495,8 +495,7 @@ bool FInventoryList::SetItemAt(UInventoryItemDefinition* ItemDef, int Count, con
 
 	if (!bForceSet)
 	{
-		auto IdArray = GetItemDefCategoryArray(ItemDef);
-		if (!IdArray.Find(Slots[Index].SlotCategoryTag))
+		if (GetItemDefCategoryArray(ItemDef).Find(Slots[Index].SlotCategoryTag) < 0)
 		{
 			return false;
 		}

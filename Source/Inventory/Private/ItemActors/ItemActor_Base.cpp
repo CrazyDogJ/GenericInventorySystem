@@ -57,29 +57,29 @@ void AItemActor_Base::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	SetHidden(false);
-	if (ItemID == nullptr || Amount == 0)
-	{
-		SetHidden(true);
-		return;
-	}
-	
-	if (!bUseDefaultInstance)
-	{
-		bool bInstancesValid = true;
-		for (auto Itr : ItemInstances)
-		{
-			if (Itr != nullptr && Itr->GetClass() != ItemID->DefaultItemInstance.GetClass())
-			{
-				bInstancesValid = false;
-				break;
-			}
-		}
-		if (!bInstancesValid)
-		{
-			SetHidden(true);
-		}
-	}
+	//SetHidden(false);
+	//if (ItemID == nullptr || Amount == 0)
+	//{
+	//	SetHidden(true);
+	//	return;
+	//}
+	//
+	//if (!bUseDefaultInstance)
+	//{
+	//	bool bInstancesValid = true;
+	//	for (auto Itr : ItemInstances)
+	//	{
+	//		if (Itr != nullptr && Itr->GetClass() != ItemID->DefaultItemInstance.GetClass())
+	//		{
+	//			bInstancesValid = false;
+	//			break;
+	//		}
+	//	}
+	//	if (!bInstancesValid)
+	//	{
+	//		SetHidden(true);
+	//	}
+	//}
 }
 
 #if WITH_EDITOR
@@ -89,6 +89,7 @@ void AItemActor_Base::RefreshItemInstance()
 	{
 		Modify();
 		ItemInstances.Empty();
+		// ReSharper disable once CppExpressionWithoutSideEffects
 		MarkPackageDirty();
 		return;
 	}
@@ -119,6 +120,7 @@ void AItemActor_Base::RefreshItemInstance()
 																NAME_None, RF_NoFlags,
 																ItemID->DefaultItemInstance));
 		}
+		// ReSharper disable once CppExpressionWithoutSideEffects
 		MarkPackageDirty();
 	}
 }

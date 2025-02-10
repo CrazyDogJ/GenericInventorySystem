@@ -165,8 +165,10 @@ void UInventoryContainerComponent::SplitItem(const int Index, const int Amount)
 		// Only not multiple right now, TODO : Do it later
 		if (InventoryList.Slots[Index].ItemDefinition->ItemInstanceType != IIT_Multiple)
 		{
-			InventoryList.SetItemAt(InventoryList.Slots[Index].ItemDefinition, Amount, EmptyIndex);
-			InventoryList.SetItemStackCountAt(Index, InventoryList.Slots[Index].GetItemStackCount() - Amount);
+			if (InventoryList.SetItemAt(InventoryList.Slots[Index].ItemDefinition, Amount, EmptyIndex))
+			{
+				InventoryList.SetItemStackCountAt(Index, InventoryList.Slots[Index].GetItemStackCount() - Amount);
+			}
 		}
 	}
 }

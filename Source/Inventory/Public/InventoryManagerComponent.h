@@ -85,11 +85,11 @@ public:
 	void CraftItem(const UInventoryItemRecipe* Recipe, int Times = 1);
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
-	void DropItem(int Index, int Amount);
+	void DropItem(UInventoryContainerComponent* ContainerComponent, int Index, int Amount);
 	
 	bool DropItemCheck(const UInventoryItemDefinition* ItemDef, FVector& DropLocation) const;
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = Inventory)
+	UFUNCTION(BlueprintAuthorityOnly, BlueprintCallable, Category = Inventory)
 	void CreateItemActorInFront(const FInventorySlot SlotToDrop, const FVector DropLocation);
 	
 	UFUNCTION(BlueprintCallable, Category = Inventory)

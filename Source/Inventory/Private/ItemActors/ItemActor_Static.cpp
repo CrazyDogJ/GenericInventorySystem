@@ -1,41 +1,99 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-
-#include "ItemActors/ItemActor_Common.h"
+﻿#include "ItemActors/ItemActor_Static.h"
 
 #include "InventoryItemDefinition.h"
-#include "InventoryManagerComponent.h"
+#include "InventorySettings.h"
 #include "Fragments/InventoryFragment_SkeletalMesh.h"
 #include "Fragments/InventoryFragment_StaticMesh.h"
+#include "ItemActors/ItemActor_Common.h"
 
-// Sets default values
-AItemActor_Common::AItemActor_Common()
+AItemActor_Static::AItemActor_Static()
 {
-	PrimaryActorTick.bCanEverTick = false;
-	bAlwaysRelevant = true;
-	bReplicates = true;
-	SetReplicatingMovement(true);
+	PrimaryActorTick.bCanEverTick = true;
 	bEnableAutoLODGeneration = false;
+	SetReplicates(true);
+	SetTickGroup(TG_PostPhysics);
+
+	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SetRootComponent(Root);
 }
 
-void AItemActor_Common::SetupActor(const FInventorySlot& Slot)
+#if WITH_EDITOR
+void AItemActor_Static::SimulatePhysics()
 {
-	ItemID = Slot.ItemDefinition;
-	Amount = Slot.StackAmount;
-	ItemInstances = Slot.StackedInstances;
-	// This function will be used in drop item feature, we will make it false to store the item instance in slot.
-	bUseDefaultInstance = false;
+	bIsSimulatingPhysicsInEditor = true;
+	if (MeshComponent)
+	{
+		MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		MeshComponent->SetCollisionObjectType(ECC_PhysicsBody);
+		MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
+		MeshComponent->SetSimulatePhysics(true);
+	}
 }
 
-void AItemActor_Common::OnConstruction(const FTransform& Transform)
+void AItemActor_Static::RefreshMesh()
+{
+	InitComps(MeshComponent, GetActorTransform());
+}
+#endif
+
+void AItemActor_Static::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!MeshComponent)
+	{
+		return;
+	}
+	
+#if WITH_EDITOR
+	if (bIsSimulatingPhysicsInEditor)
+	{
+		Root->SetWorldTransform(MeshComponent->GetComponentTransform());
+		return;
+	}
+#endif
+	
+	if (HasAuthority())
+	{
+		if (MeshComponent->IsAnyRigidBodyAwake())
+		{
+			// Spawn runtime actor
+			//use project settings cpp class or bp class
+			UClass* Class = AItemActor_Common::StaticClass();
+			if (const UInventorySettings* Settings = GetMutableDefault<UInventorySettings>())
+			{
+				if (Settings->GetDynamicItemActorClass())
+				{
+					Class = Settings->GetDynamicItemActorClass();
+				}
+			}
+		
+			auto Copy = GetWorld()->SpawnActorDeferred<AItemActor_Common>(Class, GetActorTransform());
+			Copy->ItemID = ItemID;
+			Copy->Amount = Amount;
+			Copy->ItemInstances = ItemInstances;
+			Copy->bUseDefaultInstance = bUseDefaultInstance;
+			Copy->InitVelocity = MeshComponent->GetPhysicsLinearVelocity();
+			Copy->InitAngularVelocity = MeshComponent->GetPhysicsAngularVelocityInDegrees();
+			Copy->FinishSpawning(GetActorTransform());
+			Destroy();
+		}
+	}
+	else
+	{
+		MeshComponent->SetSimulatePhysics(false);
+	}
+}
+
+void AItemActor_Static::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	
+
 	InitComps(MeshComponent, Transform);
 }
 
-//The same as static
-void AItemActor_Common::NativeOnItemPickedUp()
+//The same as common
+void AItemActor_Static::NativeOnItemPickedUp()
 {
 	Super::NativeOnItemPickedUp();
 	// When picked up, destroy!
@@ -45,14 +103,14 @@ void AItemActor_Common::NativeOnItemPickedUp()
 	}
 }
 
-void AItemActor_Common::OnRep_ItemID()
+void AItemActor_Static::OnRep_ItemID()
 {
 	Super::OnRep_ItemID();
 
 	InitComps(MeshComponent, GetTransform());
 }
 
-void AItemActor_Common::InitComps(UMeshComponent*& InMeshComponent, const FTransform& Transform)
+void AItemActor_Static::InitComps(UMeshComponent*& InMeshComponent, const FTransform& Transform)
 {
 	/** If item definition or amount is not valid, we will use SceneComponent to store current actor's transform */
 	if (!ItemID)
@@ -86,7 +144,6 @@ void AItemActor_Common::InitComps(UMeshComponent*& InMeshComponent, const FTrans
 				auto StaticMeshComp = Cast<UStaticMeshComponent>(AddedComp);
 				InMeshComponent = StaticMeshComp;
 				InMeshComponent->SetIsReplicated(true);
-				SetRootComponent(InMeshComponent);
 
 				if (Settings->PickupStaticMesh_Multiple && Amount > 1)
 				{
@@ -98,15 +155,14 @@ void AItemActor_Common::InitComps(UMeshComponent*& InMeshComponent, const FTrans
 				}
 				const bool bCollideWithPlayer = Settings->bEnableCollisionWithPlayer;
 				StaticMeshComp->SetCollisionResponseToChannel(ECC_Pawn, bCollideWithPlayer ? ECR_Block : ECR_Ignore);
+				StaticMeshComp->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
 				StaticMeshComp->SetCollisionObjectType(ECC_PhysicsBody);
 				StaticMeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 				StaticMeshComp->SetGenerateOverlapEvents(true);
 				StaticMeshComp->SetSimulatePhysics(true);
 				StaticMeshComp->SetMassOverrideInKg(NAME_None, Settings->Mass);
-				StaticMeshComp->SetPhysicsLinearVelocity(InitVelocity);
-				StaticMeshComp->SetPhysicsAngularVelocityInDegrees(InitAngularVelocity);
-				InitVelocity = FVector::Zero();
-				InitAngularVelocity = FVector::Zero();
+				StaticMeshComp->BodyInstance.bStartAwake = false;
+				StaticMeshComp->PutAllRigidBodiesToSleep();
 				OnMeshReady(StaticMeshComp);
 			}
 			break;
@@ -125,7 +181,6 @@ void AItemActor_Common::InitComps(UMeshComponent*& InMeshComponent, const FTrans
 				auto SkeletalMeshComp = Cast<USkeletalMeshComponent>(AddedComp);
 				InMeshComponent = SkeletalMeshComp;
 				InMeshComponent->SetIsReplicated(true);
-				SetRootComponent(InMeshComponent);
 				
 				if (Settings->PickupSkeletalMesh_Multiple && Amount > 1)
 				{
@@ -137,14 +192,17 @@ void AItemActor_Common::InitComps(UMeshComponent*& InMeshComponent, const FTrans
 				}
 				const bool bCollideWithPlayer = Settings->bEnableCollisionWithPlayer;
 				SkeletalMeshComp->SetCollisionResponseToChannel(ECC_Pawn, bCollideWithPlayer ? ECR_Block : ECR_Ignore);
+				SkeletalMeshComp->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
 				SkeletalMeshComp->SetCollisionObjectType(ECC_PhysicsBody);
 				SkeletalMeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 				SkeletalMeshComp->SetGenerateOverlapEvents(true);
 				SkeletalMeshComp->SetSimulatePhysics(true);
-				SkeletalMeshComp->SetPhysicsLinearVelocity(InitVelocity);
-				SkeletalMeshComp->SetPhysicsAngularVelocityInDegrees(InitAngularVelocity);
-				InitVelocity = FVector::Zero();
-				InitAngularVelocity = FVector::Zero();
+				SkeletalMeshComp->BodyInstance.bStartAwake = false;
+				for (auto Body : SkeletalMeshComp->Bodies)
+				{
+					Body->bStartAwake = false;
+				}
+				SkeletalMeshComp->PutAllRigidBodiesToSleep();
 				OnMeshReady(SkeletalMeshComp);
 			}
 			break;

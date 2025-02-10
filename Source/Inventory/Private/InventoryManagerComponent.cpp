@@ -213,14 +213,19 @@ bool UInventoryManagerComponent::DropItemCheck(const UInventoryItemDefinition* I
 	return !HitResult.IsValidBlockingHit();
 }
 
-void UInventoryManagerComponent::DropItem_Implementation(const int Index, const int Amount)
+void UInventoryManagerComponent::DropItem_Implementation(UInventoryContainerComponent* ContainerComponent, const int Index, const int Amount)
 {
-	if (InventoryList.Slots.IsValidIndex(Index))
+	if (!ContainerComponent)
 	{
-		if (FVector DropLocation; DropItemCheck(InventoryList.Slots[Index].ItemDefinition,DropLocation))
+		return;
+	}
+	
+	if (ContainerComponent->InventoryList.Slots.IsValidIndex(Index))
+	{
+		if (FVector DropLocation; DropItemCheck(ContainerComponent->InventoryList.Slots[Index].ItemDefinition,DropLocation))
 		{
-			CreateItemActorInFront(InventoryList.Slots[Index], DropLocation);
-			RemoveItem(Index, Amount);
+			CreateItemActorInFront(ContainerComponent->InventoryList.Slots[Index], DropLocation);
+			ContainerComponent->RemoveItem(Index, Amount);
 		}
 		else
 		{
@@ -270,7 +275,7 @@ void UInventoryManagerComponent::PickUpItem_Implementation(AItemActor_Base* Item
 	}
 }
 
-void UInventoryManagerComponent::CreateItemActorInFront_Implementation(const FInventorySlot SlotToDrop, const FVector DropLocation)
+void UInventoryManagerComponent::CreateItemActorInFront(const FInventorySlot SlotToDrop, const FVector DropLocation)
 {
 	FActorSpawnParameters SpawnInfo;
 	SpawnInfo.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;

@@ -15,37 +15,21 @@ public:
 	AItemActor_Common();
 
 	void SetupActor(const FInventorySlot& Slot);
-
-	void InitComps(const FTransform& Transform);
-
-	UFUNCTION(BlueprintPure)
-	bool IsRuntimeActor() const;
-
-#if WITH_EDITORONLY_DATA
-	bool bIsSimulatingPhysicsInEditor = false;
-#endif
-
-#if WITH_EDITOR
-	// Useful to build a level with item actors.
-	UFUNCTION(CallInEditor, Category = "Inventory|Editor Events")
-	void SimulatePhysics();
-
-	// Useful to refresh mesh when changing the item definition's mesh description.
-	UFUNCTION(CallInEditor, Category = "Inventory|Editor Events")
-	void RefreshMesh();
-	
-	UFUNCTION(BlueprintImplementableEvent)
-	void OnMeshReady(UPrimitiveComponent* MeshComp);
-#endif
 	
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Inventory", AdvancedDisplay)
-	UStaticMeshComponent* ItemStaticMeshComponent = nullptr;
+	UMeshComponent* MeshComponent;
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Inventory", AdvancedDisplay)
-	USkeletalMeshComponent* ItemSkeletalMeshComponent = nullptr;
+	UPROPERTY()
+	FVector InitVelocity;
+
+	UPROPERTY()
+	FVector InitAngularVelocity;
 	
 	virtual void OnConstruction(const FTransform& Transform) override;
-	virtual void Tick(float DeltaSeconds) override;
+
+	//The same as common
 	virtual void NativeOnItemPickedUp() override;
 	virtual void OnRep_ItemID() override;
+
+	void InitComps(UMeshComponent*& InMeshComponent, const FTransform& Transform);
 };
