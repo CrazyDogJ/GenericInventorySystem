@@ -120,7 +120,7 @@ void UInventoryBlueprintFunctions::PressInputByTag(UAbilitySystemComponent* ASC,
 	FScopedAbilityListLock ActiveScopeLock(*ASC);
 	for (FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
-		if (Spec.DynamicAbilityTags.HasTag(InTag))
+		if (Spec.GetDynamicSpecSourceTags().HasTag(InTag))
 		{
 			if (Spec.Ability)
 			{
@@ -135,7 +135,7 @@ void UInventoryBlueprintFunctions::PressInputByTag(UAbilitySystemComponent* ASC,
 					ASC->AbilitySpecInputPressed(Spec);
 
 					// Invoke the InputPressed event. This is not replicated here. If someone is listening, they may replicate the InputPressed event to the server.
-					ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec.Handle, Spec.ActivationInfo.GetActivationPredictionKey());					
+					ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec.Handle, Spec.GetPrimaryInstance()->GetCurrentActivationInfo().GetActivationPredictionKey());					
 				}
 				else
 				{
@@ -157,7 +157,7 @@ void UInventoryBlueprintFunctions::ReleaseInputByTag(UAbilitySystemComponent* AS
 	FScopedAbilityListLock ActiveScopeLock(*ASC);
 	for (FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
-		if (Spec.DynamicAbilityTags.HasTag(InTag))
+		if (Spec.GetDynamicSpecSourceTags().HasTag(InTag))
 		{
 			Spec.InputPressed = false;
 			if (Spec.Ability && Spec.IsActive())
@@ -169,7 +169,7 @@ void UInventoryBlueprintFunctions::ReleaseInputByTag(UAbilitySystemComponent* AS
 
 				ASC->AbilitySpecInputReleased(Spec);
 				
-				ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputReleased, Spec.Handle, Spec.ActivationInfo.GetActivationPredictionKey());
+				ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputReleased, Spec.Handle, Spec.GetPrimaryInstance()->GetCurrentActivationInfo().GetActivationPredictionKey());
 			}
 		}
 	}
