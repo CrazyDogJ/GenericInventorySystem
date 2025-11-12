@@ -74,4 +74,10 @@ public:
 	/** Item slot categories */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Category", meta=(Categories="Inventory.Category"))
 	TMap<FGameplayTag, FItemCategory> ItemCategories;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Instanced Struct")
+	TArray<TSoftObjectPtr<UScriptStruct>> InventoryInstancedStructs;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Inventory|Instanced Struct")
+	TArray<FString> StructSearchFolders;
 };

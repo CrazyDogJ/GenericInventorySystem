@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "InventoryUtility.h"
 #include "Components/ActorComponent.h"
+#include "StructUtils/InstancedStruct.h"
 #include "InventoryContainerComponent.generated.h"
 
 UCLASS(BlueprintType, Blueprintable, ClassGroup = (Inventory), meta = (BlueprintSpawnableComponent))
@@ -29,6 +30,9 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Inventory)
 	TMap<FGameplayTag, int> InventorySlotAmount;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite,	Category = Inventory, meta = (GetAllowedClasses = "GetAllowedInventoryInstancedStruct", DisallowedClasses = "GetDisallowedInventoryInstancedStruct", ExcludeBaseStruct, ShowTreeView))
+	FInstancedStruct TestInstancedStruct;
 	
 #pragma endregion
 
@@ -44,6 +48,13 @@ protected:
 	//~End of UObject interface
 	
 public:
+
+	UFUNCTION()
+	TArray<TSoftObjectPtr<UScriptStruct>> GetAllowedInventoryInstancedStruct() const;
+
+	UFUNCTION()
+	TArray<TSoftObjectPtr<UScriptStruct>> GetDisallowedInventoryInstancedStruct() const;
+	
 	UFUNCTION(BlueprintImplementableEvent, DisplayName = "On Inventory List Changed")
 	void K2_InventoryListChanged(const FInventorySlot& SlotPtr, int Index, EArrayChangeType ChangeType);
 

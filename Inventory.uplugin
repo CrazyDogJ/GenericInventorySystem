@@ -24,6 +24,11 @@
 			"Name": "InventoryExtra",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "InventoryEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
@@ -33,6 +38,10 @@
 		},
 		{
 			"Name": "GameplayTagsEditor",
+			"Enabled": true
+		},
+		{
+			"Name": "Chooser",
 			"Enabled": true
 		}
 	]

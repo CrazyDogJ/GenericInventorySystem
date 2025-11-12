@@ -134,8 +134,12 @@ void UInventoryBlueprintFunctions::PressInputByTag(UAbilitySystemComponent* ASC,
 
 					ASC->AbilitySpecInputPressed(Spec);
 
-					// Invoke the InputPressed event. This is not replicated here. If someone is listening, they may replicate the InputPressed event to the server.
-					ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec.Handle, Spec.GetPrimaryInstance()->GetCurrentActivationInfo().GetActivationPredictionKey());					
+PRAGMA_DISABLE_DEPRECATION_WARNINGS
+					// Fixing this up to use the instance activation, but this function should be deprecated as it cannot work with InstancedPerExecution
+					TArray<UGameplayAbility*> Instances = Spec.GetAbilityInstances();
+					const FGameplayAbilityActivationInfo& ActivationInfo = Instances.IsEmpty() ? Spec.ActivationInfo : Instances.Last()->GetCurrentActivationInfoRef();
+PRAGMA_ENABLE_DEPRECATION_WARNINGS
+					ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec.Handle, ActivationInfo.GetActivationPredictionKey());	
 				}
 				else
 				{
@@ -168,8 +172,13 @@ void UInventoryBlueprintFunctions::ReleaseInputByTag(UAbilitySystemComponent* AS
 				}
 
 				ASC->AbilitySpecInputReleased(Spec);
-				
-				ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputReleased, Spec.Handle, Spec.GetPrimaryInstance()->GetCurrentActivationInfo().GetActivationPredictionKey());
+
+PRAGMA_DISABLE_DEPRECATION_WARNINGS
+				// Fixing this up to use the instance activation, but this function should be deprecated as it cannot work with InstancedPerExecution
+				TArray<UGameplayAbility*> Instances = Spec.GetAbilityInstances();
+				const FGameplayAbilityActivationInfo& ActivationInfo = Instances.IsEmpty() ? Spec.ActivationInfo : Instances.Last()->GetCurrentActivationInfoRef();
+PRAGMA_ENABLE_DEPRECATION_WARNINGS
+				ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputReleased, Spec.Handle, ActivationInfo.GetActivationPredictionKey());
 			}
 		}
 	}

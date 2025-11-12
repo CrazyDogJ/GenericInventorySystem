@@ -2,6 +2,7 @@
 
 #include "InventoryContainerComponent.h"
 #include "InventorySettings.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/ActorChannel.h"
 #include "Net/UnrealNetwork.h"
 
@@ -93,6 +94,50 @@ void UInventoryContainerComponent::ReadyForReplication()
 			}
 		}
 	}
+}
+
+TArray<TSoftObjectPtr<UScriptStruct>> UInventoryContainerComponent::GetAllowedInventoryInstancedStruct() const
+{
+	TArray<TSoftObjectPtr<UScriptStruct>> Out;
+	if (const auto InventorySettings = GetMutableDefault<UInventorySettings>())
+	{
+		Out = InventorySettings->InventoryInstancedStructs;
+		
+		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+		IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+		
+		FARFilter Filter;
+		for (auto Itr : InventorySettings->StructSearchFolders)
+		{
+			Filter.PackagePaths.Add(FName(*Itr));
+		}
+		
+		Filter.bRecursivePaths = true;
+		Filter.ClassPaths.Add(UScriptStruct::StaticClass()->GetClassPathName());
+		Filter.bRecursiveClasses = true;
+
+		TArray<FAssetData> AssetList;
+		AssetRegistry.GetAssets(Filter, AssetList);
+
+		for (const FAssetData& Asset : AssetList)
+		{
+			Out.Add(TSoftObjectPtr<UScriptStruct>(Asset.ToSoftObjectPath()));
+		}
+	}
+	
+	return Out;
+}
+
+TArray<TSoftObjectPtr<UScriptStruct>> UInventoryContainerComponent::GetDisallowedInventoryInstancedStruct() const
+{
+	TArray<TSoftObjectPtr<UScriptStruct>> Result;
+
+	Result.Add(TSoftObjectPtr<UScriptStruct>(FSoftObjectPath(TEXT("/Script/Engine.AnimBlueprintMutableData"))));
+	
+	Result.Add(TSoftObjectPtr<UScriptStruct>(FSoftObjectPath(TEXT("/ControlRigModules/Modules/ModuleSettings.ModuleSettings"))));
+	Result.Add(TSoftObjectPtr<UScriptStruct>(FSoftObjectPath(TEXT("/ControlRig/Modules/RootModuleSettings.RootModuleSettings"))));
+
+	return Result;
 }
 
 void UInventoryContainerComponent::AddEmptySlots(const FGameplayTag& SlotCategoryTag, int Count)

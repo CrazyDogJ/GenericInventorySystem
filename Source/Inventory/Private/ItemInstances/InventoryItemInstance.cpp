@@ -23,7 +23,7 @@ UWorld* UInventoryItemInstance::GetWorld() const
 
 void UInventoryItemInstance::Tick(float DeltaTime)
 {
-	if (!IsUnreachable() && GetWorld())
+	if (GetWorld())
 	{
 		//native tick here
 		K2_Tick(DeltaTime);
